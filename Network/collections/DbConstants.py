@@ -12,7 +12,7 @@ DEFL_EXPANSIONFACTOR = 2
 
 TEST_ROUNDS = 20  # This would be 20 * 6 type of operations, so 120 operations in total
 
-FB_URL = 'https://tfg-en-psi-default-rtdb.europe-west1.firebasedatabase.app'
+FB_URL = 'https://ws-psi-default-rtdb.europe-west1.firebasedatabase.app/'
 
 
 def print_banner():

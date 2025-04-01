@@ -18,3 +18,4 @@ build/
 .idea/misc.xml
 .idea/WS_PSI.iml
 FirebaseCredentials.json
+firebase-credentials.json
