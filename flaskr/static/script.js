@@ -7,19 +7,12 @@ $(document).ready(function(){
     setInterval(check_connection, 10000);
     setInterval(update_devices, 10000);
     check_tasks();
-});
 
-function check_connection() {
-    $.get('/api/check_connection', function(data){
-        if (data.status === nodeNotConnected) {
-            $('#connect').prop('disabled', false);
-            $('#disconnect').prop('disabled', true);
-        } else {
-            $('#connect').prop('disabled', true);
-            $('#disconnect').prop('disabled', false);
-        }
-    });
-}
+    // Load saved theme
+    if (localStorage.getItem("darkMode") === "true") {
+        toggleTheme();
+    }
+});
 
 let nodeNotConnected = "Node not connected";
 
@@ -29,18 +22,21 @@ function get_id() {
     });
 }
 
+function get_port() {
+    $.get('/api/port', function(data){
+        $('#port').text(data.port);
+    });
+}
+
 function loader() {
-    $('#devices').html('<div class="preloader-wrapper small active">\
-                            \n<div class="spinner-layer spinner-green-only">\
-                            \n<div class="circle-clipper left">\
-                            \n<div class="circle"></div>\
-                            \n</div><div class="gap-patch">\
-                            \n<div class="circle"></div>\
-                            \n</div><div class="circle-clipper right">\
-                            \n<div class="circle"></div>\
-                            \n</div>\
-                            \n</div>\
-                            \n</div>');
+    $('#devices').html(`
+        <div class="preloader-wrapper small active">
+            <div class="spinner-layer spinner-green-only">
+                <div class="circle-clipper left"><div class="circle"></div></div>
+                <div class="gap-patch"><div class="circle"></div></div>
+                <div class="circle-clipper right"><div class="circle"></div></div>
+            </div>
+        </div>`);
 }
 
 function update_devices() {
@@ -50,26 +46,38 @@ function update_devices() {
         if (data.status === nodeNotConnected) {
             $('#devicesConnected').html('<h2>El nodo está apagado</h2>');
         } else {
+            $('#devicesConnected').html('<h2>Dispositivos registrados</h2>');
             $.each(data, function(key, value){
                 let displayKey = key;
-                // Check if the key is an IPv6 address
                 if (/:/.test(key)) {
-                    // Abbreviate the IPv6 address for display
                     displayKey = key.replace(/:.*:/, '::');
                 }
-                $('#devicesConnected').html('<h2>Dispositivos registrados</h2>');
-                $('#devices').append('<p id="' + key + '">' + displayKey + ': Last seen: ' + value +
-                ' <button class="btn waves-effect waves-light" onclick="ping(\'' + key + '\')">Ping</button>' +
-                '<button class="btn waves-effect waves-light" onclick="FindIntersection(\'' + key + '\', \'' + 'Paillier' + '\', \'' + 'PSI-Domain' +'\')">Paillier</button>'
-                +
-                ' <button class="btn waves-effect waves-light" onclick="FindIntersection(\'' + key + '\', \'' + 'Damgard-Jurik' + '\', \'' + 'PSI-Domain' +'\')">Damgard-Jurik</button></p>' +
-                ' <button class="btn waves-effect waves-light" onclick="FindIntersection(\'' + key + '\', \'' + 'Paillier OPE' + '\', \'' + 'OPE' +'\')">Paillier - OPE</button>' +
-                ' <button class="btn waves-effect waves-light" onclick="FindIntersection(\'' + key + '\', \'' + 'Damgard-Jurik OPE' + '\', \'' + 'OPE' +'\')">Damgard-Jurik - OPE</button>' +
-                ' <button class="btn waves-effect waves-light" onclick="FindIntersection(\'' + key + '\', \'' + 'Paillier PSI-CA OPE' + '\', \'' + 'PSI-CA' +'\')">Cardinality - Paillier</button>' +
-                ' <button class="btn waves-effect waves-light" onclick="FindIntersection(\'' + key + '\', \'' + 'Damgard-Jurik PSI-CA OPE' + '\', \'' + 'PSI-CA' +'\')">Cardinality - Damgard-Jurik</button>' +
-                ' <button class="btn waves-effect waves-light" onclick="test(\'' + key + '\')">Launch test</button>'
-                );
+                $('#devices').append(`
+                    <div class="card blue-grey darken-1" id="card-${key}">
+                        <div class="card-content white-text">
+                            <span class="card-title">${displayKey}</span>
+                            <p>Última conexión: ${value}</p>
+                            <div class="result-message" id="result-${key}" style="margin-top: 10px;"></div>
+                        </div>
+                        <div class="card-action">
+                            <a class="btn-small" onclick="ping('${key}')">Ping</a>
+                            <a class="btn-small" onclick="test('${key}')">Test</a>
+                            <div class="input-field inline">
+                                <select id="scheme-${key}">
+                                    <option value="Paillier PSI-Domain">Paillier PSI-Domain</option>
+                                    <option value="Damgard-Jurik PSI-Domain">Damgard-Jurik PSI-Domain</option>
+                                    <option value="Paillier OPE">Paillier OPE</option>
+                                    <option value="Damgard-Jurik OPE">Damgard-Jurik OPE</option>
+                                    <option value="Paillier PSI-CA OPE">Cardinality - Paillier</option>
+                                    <option value="Damgard-Jurik PSI-CA OPE">Cardinality - Damgard-Jurik</option>
+                                </select>
+                                <button class="btn-small btn-dark" onclick="runScheme('${key}')">Iniciar</button>
+                            </div>
+                        </div>
+                    </div>
+                `);                
             });
+            $('select').formSelect();
         }
     });
 }
@@ -79,22 +87,41 @@ function ping(device) {
     $.post('/api/ping/' + device, function(data){
     }).done(function(data){
         const message = data.status;
-        M.toast({html: message});
+        showToast(message);
+        showResult(device, message);
         update_devices();
     });
 }
 
-function get_port() {
-    $.get('/api/port', function(data){
-        $('#port').text(data.port);
+function test(device) {
+    $.post(`/api/test?device=${device}`, function(data){})
+    .done(function(data) {
+        const message = data.status;
+        showToast(message);
+        showResult(device, message);
+    })
+    .fail(function() {
+        const error = "Error returned, likely the node threw an exception. Check the logs.";
+        showToast(error);
+        showResult(device, error);
     });
+}
 
+function formatTestResults(data) {
+    if (!data.results) return data.status;
+
+    let html = `<strong>${data.status}</strong><ul>`;
+    for (const [scheme, result] of Object.entries(data.results)) {
+        html += `<li><strong>${scheme}</strong>: ${result}</li>`;
+    }
+    html += `</ul>`;
+    return html;
 }
 
 function connect() {
     $.post('/api/connect', function(data){
         const message = data.status;
-        M.toast({html: message});
+        showToast(message);
         update_devices();
         get_port();
         get_id();
@@ -106,7 +133,7 @@ function connect() {
 function disconnect() {
     $.post('/api/disconnect', function(data){
         const message = data.status;
-        M.toast({html: message});
+        showToast(message);
         update_devices();
         get_port();
         get_id();
@@ -115,7 +142,7 @@ function disconnect() {
     });
 }
 
-function FindIntersection(device, scheme, type, rounds) {
+function FindIntersection(device, scheme, type, rounds = 1) {
     const data = {
         "device": device,
         "scheme": scheme,
@@ -130,29 +157,49 @@ function FindIntersection(device, scheme, type, rounds) {
         dataType: 'json',
         success: function(data) {
             const message = data.status;
-            M.toast({html: message});
+            showToast(message);
+            showResult(device, message);
         }
     });
 }
 
+function runScheme(device) {
+    const value = $(`#scheme-${device}`).val();
+    const [scheme, type] = value.split(' ');
+    FindIntersection(device, scheme, type || 'OPE');
+}
 
-function test(device) {
-    $.post(`/api/test?device=${device}`, function(data){
-    })
-    .done(function(data) {
-        const message = data.status;
-        M.toast({html: message});
-    })
-    .fail(function() {
-        M.toast({html: "Error returned, likely the node threw an exception. Check the logs for more information."});
+function showToast(message) {
+    M.toast({html: message});
+}
+
+function showResult(device, message) {
+    $(`#result-${device}`).html(`<span class="green-text text-lighten-4">${message}</span>`);
+}
+
+function discover_peers() {
+    loader();
+    $.ajax({
+        type: 'POST',
+        url: '/api/discover_peers',
+        beforeSend: function() {
+            $('.preloader-wrapper').show();
+        },
+        success: function(data) {
+            const message = data.status;
+            showToast(message);
+            setTimeout(function() {
+                $('.preloader-wrapper').hide();
+                update_devices();
+            }, 2000);
+        }
     });
-
 }
 
 function mykeys() {
     $.get('/api/mykeys', function(data){
-        const message = "Claves públicas: " + "\nPaillier\nn: " + data.pubkeyN + "\ng: " + data.pubkeyG
-            + "\nDamgard-Jurik\nn: " + data.pubkeyNDJ + "\ns: " + data.pubkeySDJ + "\nm: " + data.pubkeyMDJ;
+        const message = "Claves públicas: \n\nPaillier\nn: " + data.pubkeyN + "\ng: " + data.pubkeyG +
+                        "\n\nDamgard-Jurik\nn: " + data.pubkeyNDJ + "\ns: " + data.pubkeySDJ + "\nm: " + data.pubkeyMDJ;
         window.open().document.write('<pre>' + message + '</pre>');
     });
 }
@@ -174,51 +221,41 @@ function results() {
 function genkeys(scheme, bitlength) {
     $.post(`/api/genkeys?scheme=${scheme}&bit_length=${bitlength}`, function(data){
         const message = data.status;
-        M.toast({html: message});
+        showToast(message);
     });
 }
 
-function discover_peers() {
-    $('#devices').html('<div class="preloader-wrapper small active">\
-                            \n<div class="spinner-layer spinner-green-only">\
-                            \n<div class="circle-clipper left">\
-                            \n<div class="circle"></div>\
-                            \n</div><div class="gap-patch">\
-                            \n<div class="circle"></div>\
-                            \n</div><div class="circle-clipper right">\
-                            \n<div class="circle"></div>\
-                            \n</div>\
-                            \n</div>\
-                            \n</div>');
-    $.ajax({
-        type: 'POST',
-        url: '/api/discover_peers',
-        beforeSend: function() {
-            // Muestra el spinner antes de enviar la solicitud
-            $('.preloader-wrapper').show();
-        },
-        success: function(data) {
-            const message = data.status;
-            M.toast({html: message});
-
-            // Espera 2 segundos antes de ocultar el spinner
-            setTimeout(function() {
-                $('.preloader-wrapper').hide();
-                update_devices();
-            }, 2000);
+function check_connection() {
+    $.get('/api/check_connection', function(data){
+        if (data.status === nodeNotConnected) {
+            $('#connect').prop('disabled', false);
+            $('#disconnect').prop('disabled', true);
+        } else {
+            $('#connect').prop('disabled', true);
+            $('#disconnect').prop('disabled', false);
         }
     });
 }
 
 function check_tasks() {
     setInterval(function() {
-        $.get('http://127.0.0.1:5000//api/tasks', function(data) {
+        $.get('/api/tasks', function(data) {
             let nodeStatus = data.status[0];
             let handlerStatus = data.status[1];
             $('#pending_node').text(nodeStatus);
             $('#pending_handler').text(handlerStatus);
         });
     }, 1000);
-
 }
 
+function toggleTheme() {
+    document.body.classList.toggle("dark-mode");
+    document.querySelector('.left-menu').classList.toggle("dark-mode");
+    document.querySelector('.content').classList.toggle("dark-mode");
+    document.querySelectorAll('.card').forEach(card => card.classList.toggle("dark-mode"));
+
+    const isDark = document.body.classList.contains("dark-mode");
+    const toggleBtn = document.querySelector('button[onclick="toggleTheme()"]');
+    toggleBtn.innerHTML = isDark ? "☀️ Modo Claro" : "🌙 Modo Oscuro";
+    localStorage.setItem("darkMode", isDark);
+}

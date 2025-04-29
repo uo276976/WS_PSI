@@ -10,6 +10,7 @@ from Network.collections import networking
 from Network.collections.DbConstants import DEFL_PORT, print_banner
 from Network.collections.networking import is_valid_ipv4, is_valid_ipv6
 from Crypto.helpers.CryptoImplementation import CryptoImplementation
+from Crypto import implementations
 
 
 def node_wrapper(func):
@@ -98,16 +99,16 @@ def create_app(test_config=None):
     @app.route('/api/mykeys', methods=['GET'])
     @node_wrapper
     def api_pubkey(node):
-        return (jsonify({'pubkeyN': str(node.json_handler.CSHandlers[CryptoImplementation.from_string("Paillier")].
-                                        public_key.n),
-                         'pubkeyG': str(node.json_handler.CSHandlers[CryptoImplementation.from_string("Paillier")].
-                                        public_key.g),
-                         'pubkeyNDJ': str(node.json_handler.
-                                          CSHandlers[CryptoImplementation.from_string("DamgardJurik")].public_key.n),
-                         'pubkeySDJ': str(node.json_handler.
-                                          CSHandlers[CryptoImplementation.from_string("DamgardJurik")].public_key.s),
-                         'pubkeyMDJ': str(node.json_handler.
-                                          CSHandlers[CryptoImplementation.from_string("DamgardJurik")].public_key.m)}))
+        pubkeys = {}
+        for impl_obj, handler in node.json_handler.CSHandlers.items():
+            try:
+                pubkey = handler.public_key
+                # Serialize the public key
+                pubkeys[impl_obj.name] = {k: str(v) for k, v in vars(pubkey).items()}
+            except AttributeError:
+                continue  # Skip if the handler does not have a public key yet
+
+        return jsonify(pubkeys)
 
     @app.route('/api/intersection', methods=['POST'])
     @node_wrapper
@@ -169,8 +170,8 @@ def create_app(test_config=None):
     def api_metrics(node):
         id = request.args.get('id')
         if id is not None:
-            return Logs.get_logs(id)
-        return Logs.get_logs(node.id)
+            return jsonify(Logs.get_logs(id))
+        return jsonify(Logs.get_logs(node.id))
 
     @app.route('/api/test', methods=['POST'])
     @node_wrapper

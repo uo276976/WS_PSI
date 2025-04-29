@@ -44,3 +44,27 @@ button {
     text-align: center;
     font-style: italic;
 }
+body.dark-mode {
+    background-color: #121212;
+    color: #e0e0e0;
+}
+
+.left-menu.dark-mode {
+    background-color: #1e1e1e;
+    color: #fff;
+}
+
+.content.dark-mode {
+    background-color: #121212;
+    color: #e0e0e0;
+}
+
+.card.dark-mode {
+    background-color: #263238;
+    color: #fff;
+}
+
+.btn-dark {
+    background-color: #333 !important;
+    color: white !important;
+}

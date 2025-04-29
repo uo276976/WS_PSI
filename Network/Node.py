@@ -7,7 +7,7 @@ import zmq
 from Network.JSONHandler import JSONHandler
 from Network.PriorityExecutor import PriorityExecutor
 from Network.collections.DbConstants import DEFL_DOMAIN, DEFL_SET_SIZE
-
+from Crypto.helpers.CryptoImplementation import CryptoImplementation
 
 class Node:
     __instance = None
@@ -60,17 +60,29 @@ class Node:
             self._connect_to_peer(peer)
 
     def _connect_to_peer(self, peer):
+        print(f"[{self.id}] Attempting connection to {peer}:{self.port}")
         dealer_socket = self.context.socket(zmq.DEALER)
         dealer_socket.set_hwm(2000)
-        dealer_socket.connect(f"tcp://{peer}:{self.port}")
-        dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
+        try:
+            dealer_socket.connect(f"tcp://{peer}:{self.port}")
+            dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
+            self.devices[peer] = {"socket": dealer_socket, "last_seen": None}
+            print(f"[{self.id}] Connection initiated to {peer}")
+        except zmq.ZMQError as e:
+            print(f"[{self.id}] ERROR connecting to {peer}: {e}")
 
-        # Update devices dictionary
-        if "[" in peer and "]" in peer:  # IPv6 address
-            address = peer.split("]:")[0] + "]"
-        else:  # IPv4 address
-            address = peer.split(":")[0]
-        self.devices[address] = {"socket": dealer_socket, "last_seen": None}
+    def log_event(self, event_type: str, message: str):
+        timestamp = time.strftime("%H:%M:%S", time.localtime())
+        print(f"[{timestamp}][{self.id}][{event_type}] {message}")
+        
+    def confirm_connection(self, peer):
+        try:
+            socket = self.devices[peer]["socket"]
+            socket.send_string(f"{self.id} is pinging you!")
+            reply = socket.recv_string(flags=zmq.NOBLOCK)
+            return reply.endswith("is up and running!")
+        except zmq.ZMQError:
+            return False
 
     def start_router_socket(self):
         if "[" in self.id and "]" in self.id:
@@ -197,18 +209,19 @@ class Node:
         Node.__instance = None
 
     def genkeys(self, scheme, bit_length):
-        if bit_length < 16:
-            return "Minimum bit length is 16"
-        if scheme == "Paillier":
-            self.executor.submit(1, self.json_handler.genkeys, "Paillier", bit_length)
-            return "Generating Paillier keys... Bit length: " + str(bit_length)
-        elif scheme == "Damgard-Jurik":
-            self.executor.submit(1, self.json_handler.genkeys, "Damgard-Jurik", bit_length)
-            return "Generating Damgard-Jurik keys... Bit length: " + str(bit_length)
-        elif scheme == "BFV":
-            self.executor.submit(1, self.json_handler.genkeys, "BFV", bit_length)
-            return "Generating BFV keys... Bit length is ignored"
-        return "Invalid scheme"
+        impl = CryptoImplementation.from_string(scheme)
+        if impl is None:
+            return "Invalid scheme"
+
+        if bit_length is not None and str(bit_length).isdigit():
+            bit_length = int(bit_length)
+            if bit_length < 16:
+                return "Minimum bit length is 16"
+        else:
+            bit_length = None
+
+        self.executor.submit(1, self.json_handler.genkeys, scheme, bit_length)
+        return f"Generating {scheme} keys... {'Bit length: ' + str(bit_length) if bit_length else 'Using default'}"
 
     def new_peer(self, peer, last_seen):
         if peer in self.devices:
@@ -222,35 +235,49 @@ class Node:
 
     def discover_peers(self):
         print(f"Node {self.id} (You) - Discovering peers on port {self.port}")
-        sockets = []
-        # Iterar sobre todas las direcciones IP posibles en la subred
-        for i in range(1, 256):
-            ip = f"192.168.1.{i}"
+        base_ip = "172.18.0."
+        for i in range(2, 10):  # rangos para nodos
+            ip = f"{base_ip}{i}"
             if ip not in self.devices and ip != self.id:
-                # Crear un nuevo socket y tratar de conectar
-                dealer_socket = self.context.socket(zmq.DEALER)
-                print(f"Node {self.id} (You) - Trying to connect to " + ip)
-                dealer_socket.connect(f"tcp://{ip}:{self.port}")
-                # Enviar un mensaje de descubrimiento
-                dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
-                sockets.append(dealer_socket)
-        # Se cierran todos, los que respondan se añadirán a la lista usando el método apropiado
-        time.sleep(1)
-        for socket in sockets:
-            socket.setsockopt(zmq.LINGER, 0)
-            socket.close()
-        return "Discovering peers..."
+                try:
+                    dealer_socket = self.context.socket(zmq.DEALER)
+                    dealer_socket.connect(f"tcp://{ip}:{self.port}")
+                    dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
+                    self.devices[ip] = {"socket": dealer_socket, "last_seen": None}
+                    print(f"Node {self.id} (You) - Trying to connect to {ip}")
+                except zmq.ZMQError as e:
+                    print(f"Error connecting to {ip}: {e}")
 
     def start_intersection(self, device, scheme, type, rounds=1) -> str:
         if device in self.devices:
+            if not self.confirm_connection(device):
+                return f"Peer {device} not responsive. Try again later."
             return self.json_handler.start_intersection(device, scheme, type, rounds)
-        return "Device not found - Have the peer send an ACK first"
+        return "Device not found"
 
-    def launch_test(self, device) -> str:
+    def node_status(self):
+        print(f"\n=== Node {self.id} Status ===")
+        print(f"- Port: {self.port}")
+        print(f"- Peers connected: {len(self.devices)}")
+        for peer, info in self.devices.items():
+            status = "Active" if info["last_seen"] else "No response"
+            print(f"  -> {peer} [{status}]")
+        tasks = self.check_tasks()
+        print(f"- {tasks[0]}")
+        print(f"- {tasks[1]}")
+        print(f"============================\n")
+
+    def launch_test(self, device) -> dict:
         if device in self.devices:
             self.json_handler.test_launcher(device)
-            return "Launching a massive test with " + device + " - Check logs"
-        return "Device not found"
+            return {
+                "status": f"Test launched with {device}",
+                "results": None
+            }
+        return {
+            "status": "Device not found",
+            "results": None
+        }
 
     def update_setup(self, domain, set_size) -> str:
         if not domain.isdigit() or not set_size.isdigit() or int(domain) < int(set_size):
@@ -275,3 +302,15 @@ class Node:
         except zmq.Again:
             print(f"Warning: HWM full - Message not sent to {peer} - Device is not consuming messages - Discarding it "
                   f"for the memory's sake")
+            
+    def track_operation(self, operation_type, peer=None, status="STARTED", extra_info=None):
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        entry = {
+            "timestamp": timestamp,
+            "node": self.id,
+            "operation": operation_type,
+            "status": status,
+            "peer": peer,
+            "info": extra_info or ""
+        }
+        print(f"[OPERATION][{operation_type}] -> {entry}")

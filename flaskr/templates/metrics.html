@@ -2,6 +2,13 @@
 <html lang="es">
 <head>
     <title>Métricas</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
@@ -18,6 +25,9 @@
         <button class="btn waves-effect waves-light" id="download-excel">Descargar Excel</button>
     </div>
     <div id="loading-spinner" class="preloader-wrapper active">
+        <div style="width:80%; margin: auto;">
+          <canvas id="metricsChart"></canvas>
+        </div>
         <div class="spinner-layer spinner-blue-only">
           <div class="circle-clipper left">
             <div class="circle"></div>

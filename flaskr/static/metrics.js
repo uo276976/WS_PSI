@@ -11,18 +11,61 @@ function get_id() {
 }
 
 function populate_table() {
-  $('#loading-spinner').show();
+    $('#loading-spinner').show();
+  
+    $.getJSON('/api/logs', function(data){
+        $('#logs').empty();
+  
+        $.each(data, function(key, value){
+            $('#logs').append('<tr><td>' + value['timestamp'] + '</td><td>' + value['activity_code'] + '</td><td>' + value['time'] + '</td><td>' + value['Avg_RAM'] + '</td><td>' + value['Avg_instance_RAM'] + '</td><td>' + value['Avg_CPU'] + '</td><td>' + value['Avg_instance_CPU'] + '</td></tr>');
+        });
+  
+        drawChart(Object.values(data));
+        $('#logs').DataTable();  // Enable search/pagination
+    })
+    .always(function() {
+      $('#loading-spinner').hide();
+    });
+}  
 
-  $.getJSON('/api/logs', function(data){
-      $('#logs').empty();
+function drawChart(data) {
+    const labels = data.map(d => d.timestamp);
+    const cpu = data.map(d => d.Avg_CPU);
+    const ram = data.map(d => d.Avg_RAM);
 
-      $.each(data, function(key, value){
-          $('#logs').append('<tr><td>' + value['timestamp'] + '</td><td>' + value['activity_code'] + '</td><td>' + value['time'] + '</td><td>' + value['Avg_RAM'] + '</td><td>' + value['Avg_instance_RAM'] + '</td><td>' + value['Avg_CPU'] + '</td><td>' + value['Avg_instance_CPU'] + '</td></tr>');
-      });
-  })
-  .always(function() {
-    $('#loading-spinner').hide();
-  });
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Avg CPU (%)',
+                    data: cpu,
+                    borderColor: 'rgb(255, 99, 132)',
+                    tension: 0.2
+                },
+                {
+                    label: 'Avg RAM (MB)',
+                    data: ram,
+                    borderColor: 'rgb(54, 162, 235)',
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top'
+                },
+                title: {
+                    display: true,
+                    text: 'Uso de recursos del nodo'
+                }
+            }
+        }
+    });
 }
 
 function downloadExcel() {

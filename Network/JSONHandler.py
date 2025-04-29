@@ -4,10 +4,22 @@ import time
 from Crypto.handlers.CAOPEHandler import CAOPEHandler
 from Crypto.handlers.DomainPSIHandler import DomainPSIHandler
 from Crypto.handlers.OPEHandler import OPEHandler
+from Crypto.handlers.DHHandler import DHHandler
+from Crypto.handlers.CSIDHHandler import CSIDHHandler
+from Crypto.handlers.KyberHandler import KyberHandler
+from Crypto.handlers.NewHopeHandler import NewHopeHandler
+from Crypto.handlers.FrodoKEMHandler import FrodoKEMHandler
+from Crypto.handlers.SIDHHandler import SIDHHandler
 from Crypto.helpers.BFVHelper import BFVHelper
 from Crypto.helpers.CryptoImplementation import CryptoImplementation
 from Crypto.helpers.DamgardJurikHandler import DamgardJurikHelper
 from Crypto.helpers.PaillierHandler import PaillierHelper
+from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper
+from Crypto.helpers.CSIDHHelper import CSIDHHelper
+from Crypto.helpers.KyberHelper import KyberHelper
+from Crypto.helpers.NewHopeHelper import NewHopeHelper
+from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
+from Crypto.helpers.SIDHHelper import SIDHHelper
 from Logs import Logs
 from Logs.Logs import ThreadData
 from Network.PriorityExecutor import PriorityExecutor
@@ -21,29 +33,50 @@ from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 # 1 and 2 will be executed first to stop consuming memory on the queue
 class JSONHandler:
     def __init__(self, id, my_data, domain, devices, results, new_peer_function):
+        # Crypto System (CS) Helpers
         self.CSHandlers = {
-            CryptoImplementation("Paillier", "Paillier OPE", "Paillier_OPE",
-                                 "Paillier PSI-CA OPE"): PaillierHelper(),
-            CryptoImplementation("DamgardJurik", "Damgard-Jurik", "DamgardJurik OPE",
-                                 "Damgard-Jurik_OPE", "Damgard-Jurik OPE", "DamgardJurik PSI-CA OPE",
-                                 "Damgard-Jurik PSI-CA OPE"): DamgardJurikHelper(),
-            CryptoImplementation("BFV", "BFV_OPE", "BFV OPE"): BFVHelper()
+            CryptoImplementation.from_string("Paillier"): PaillierHelper(),
+            CryptoImplementation.from_string("DamgardJurik"): DamgardJurikHelper(),
+            CryptoImplementation.from_string("BFV"): BFVHelper(),
+            CryptoImplementation.from_string("Diffie-Hellman"): DiffieHellmanHelper(),
+            CryptoImplementation.from_string("CSIDH"): CSIDHHelper(),
+            CryptoImplementation.from_string("Kyber"): KyberHelper(),
+            CryptoImplementation.from_string("NewHope"): NewHopeHelper(),
+            CryptoImplementation.from_string("FrodoKEM"): FrodoKEMHelper(),
+            CryptoImplementation.from_string("SIDH"): SIDHHelper(),
         }
+
+        # Handlers for PSI operations
         self.OPEHandler = OPEHandler(id, my_data, domain, devices, results)
         self.CAOPEHandler = CAOPEHandler(id, my_data, domain, devices, results)
         self.domainPSIHandler = DomainPSIHandler(id, my_data, domain, devices, results)
+
+        # Handlers for NIKEs
+        self.DHHandler = DHHandler(id, my_data, domain, devices, results)
+        self.CSIDHHandler = CSIDHHandler(id, my_data, domain, devices, results)
+        self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
+        self.NewHopeHandler = NewHopeHandler(id, my_data, domain, devices, results)
+        self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
+        self.NewHopeHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
+        self.NewHopeHandler = SIDHHandler(id, my_data, domain, devices, results)
+
+        # General setup
         self.id = id
         self.devices = devices
         self.executor = PriorityExecutor(max_workers=10)
         self.new_peer = new_peer_function
 
     def test_launcher(self, device):
-        cs_handlers = self.CSHandlers.values()
-        for _ in range(TEST_ROUNDS):
-            for cs in cs_handlers:
-                self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
-                self.executor.submit(0, self.OPEHandler.intersection_first_step, device, cs)
-                self.executor.submit(0, self.CAOPEHandler.intersection_first_step, device, cs)
+        for cs_impl, cs_helper in self.CSHandlers.items():
+            for _ in range(TEST_ROUNDS):
+                if cs_impl.category == "PSI-Domain":
+                    self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs_helper)
+                elif cs_impl.category == "OPE":
+                    self.executor.submit(0, self.OPEHandler.intersection_first_step, device, cs_helper)
+                elif cs_impl.category == "PSI-CA":
+                    self.executor.submit(0, self.CAOPEHandler.intersection_first_step, device, cs_helper)
+                elif cs_impl.category == "NIKE":
+                    self.executor.submit(0, cs_helper.intersection_first_step, device, cs_helper)
 
     def genkeys(self, cs, bit_length=None, domain=None):
         start_time = time.time()
@@ -60,22 +93,23 @@ class JSONHandler:
 
     def start_intersection(self, device, scheme, type, rounds) -> str:
         crypto_impl = CryptoImplementation.from_string(scheme)
-        if crypto_impl in self.CSHandlers:
-            cs = self.CSHandlers[crypto_impl]
-            if type == "OPE":
-                for _ in range(int(rounds)):
-                    self.executor.submit(0, self.OPEHandler.intersection_first_step, device, cs)
-            elif type == "PSI-CA" and cs.imp_name != "BFV":
-                for _ in range(int(rounds)):
-                    self.executor.submit(0, self.CAOPEHandler.intersection_first_step, device, cs)
-            elif type == "PSI-Domain":
-                for _ in range(int(rounds)):
-                    self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
+        if crypto_impl not in self.CSHandlers:
+            return "Invalid scheme: " + scheme
+
+        cs = self.CSHandlers[crypto_impl]
+        for _ in range(int(rounds)):
+            if crypto_impl.category == "OPE" and type == "OPE":
+                self.executor.submit(0, self.OPEHandler.intersection_first_step, device, cs)
+            elif crypto_impl.category == "PSI-CA" and type == "PSI-CA":
+                self.executor.submit(0, self.CAOPEHandler.intersection_first_step, device, cs)
+            elif crypto_impl.category == "PSI-Domain" and type == "PSI-Domain":
+                self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
+            elif crypto_impl.category == "NIKE" and type == "NIKE":
+                self.executor.submit(0, cs.intersection_first_step, device, cs)
             else:
-                return "Invalid type: " + type if cs.imp_name != "BFV" else "BFV does not support PSI-CA... yet"
-            return ("Intersection with " + device + " - " + scheme + " - " + type + " - Rounds: " + str(rounds) +
-                    " - Task started, check logs")
-        return "Invalid scheme: " + scheme
+                return f"Incompatible scheme {scheme} with type {type}"
+
+        return f"Intersection with {device} - {scheme} - {type} - Rounds: {rounds} - Task started, check logs"
 
     def handle_message(self, message):
         try:
@@ -92,32 +126,38 @@ class JSONHandler:
 
     def handle_intersection_second_step(self, message):
         crypto_impl = CryptoImplementation.from_string(message['implementation'])
-        if crypto_impl in self.CSHandlers:
-            cs = self.CSHandlers[crypto_impl]
-            if "PSI-CA" in message['implementation']:
-                self.executor.submit(1, self.CAOPEHandler.intersection_second_step, message['peer'],
-                                     cs, message['data'], message['pubkey'])
-            elif "OPE" in message['implementation']:
-                self.executor.submit(1, self.OPEHandler.intersection_second_step, message['peer'], cs,
-                                     message['data'], message['pubkey'])
-            else:
-                self.executor.submit(1, self.domainPSIHandler.intersection_second_step, message['peer'], cs,
-                                     message['data'], message['pubkey'])
-        else:
-            Exception("Invalid scheme: " + message['implementation'])
+        if crypto_impl not in self.CSHandlers:
+            raise Exception("Invalid scheme: " + message['implementation'])
+
+        cs = self.CSHandlers[crypto_impl]
+        peer = message['peer']
+        data = message['data']
+        pubkey = message['pubkey']
+
+        if crypto_impl.category == "PSI-CA":
+            self.executor.submit(1, self.CAOPEHandler.intersection_second_step, peer, cs, data, pubkey)
+        elif crypto_impl.category == "OPE":
+            self.executor.submit(1, self.OPEHandler.intersection_second_step, peer, cs, data, pubkey)
+        elif crypto_impl.category == "NIKE":
+            self.executor.submit(1, cs.intersection_second_step, peer, cs, data, pubkey)
+        else:  # PSI-Domain
+            self.executor.submit(1, self.domainPSIHandler.intersection_second_step, peer, cs, data, pubkey)
 
     def handle_intersection_final_step(self, message):
         crypto_impl = CryptoImplementation.from_string(message['implementation'])
-        if crypto_impl in self.CSHandlers:
-            cs = self.CSHandlers[crypto_impl]
-            if "PSI-CA" in message['implementation']:
-                self.executor.submit(2, self.CAOPEHandler.intersection_final_step, message['peer'], cs,
-                                     message['data'])
-            elif "OPE" in message['implementation']:
-                self.executor.submit(2, self.OPEHandler.intersection_final_step, message['peer'], cs,
-                                     message['data'])
-            else:
-                self.executor.submit(2, self.domainPSIHandler.intersection_final_step, message['peer'], cs,
-                                     message['data'])
-        else:
-            Exception("Invalid scheme: " + message['implementation'])
+        if crypto_impl not in self.CSHandlers:
+            raise Exception("Invalid scheme: " + message['implementation'])
+
+        cs = self.CSHandlers[crypto_impl]
+        peer = message['peer']
+        data = message['data']
+
+        if crypto_impl.category == "PSI-CA":
+            self.executor.submit(2, self.CAOPEHandler.intersection_final_step, peer, cs, data)
+        elif crypto_impl.category == "OPE":
+            self.executor.submit(2, self.OPEHandler.intersection_final_step, peer, cs, data)
+        elif crypto_impl.category == "NIKE":
+            self.executor.submit(2, cs.intersection_final_step, peer, cs, data)
+        else:  # PSI-Domain
+            self.executor.submit(2, self.domainPSIHandler.intersection_final_step, peer, cs, data)
+
