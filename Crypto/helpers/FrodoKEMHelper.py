@@ -1,18 +1,23 @@
-from FrodoKEM.frodo640.api_frodo640 import FrodoAPI640
+import oqs
 
 class FrodoKEMHelper:
     def __init__(self):
-        self.api = FrodoAPI640()
-        self.public_key = None
-        self.secret_key = None
+        self.imp_name = "FrodoKEM"
+        self.kem = oqs.KeyEncapsulation('FrodoKEM-640-AES')
+        self.public_key = self.kem.generate_keypair()
+        self.secret_key = self.kem.export_secret_key()
 
-    def generate_keys(self, bit_length=None, domain=None):
-        self.public_key, self.secret_key = self.api.crypto_kem_keypair_frodo640()
+        self.shared_key = None
+        self.ciphertext = None
 
-    def encapsulate(self, peer_public_key):
-        ciphertext, shared_secret = self.api.crypto_kem_enc_frodo640(peer_public_key)
-        return ciphertext, shared_secret
+    def generate_keys(self):
+        self.kem = oqs.KeyEncapsulation('FrodoKEM-640-AES')
+        self.public_key = self.kem.generate_keypair()
 
-    def decapsulate(self, ciphertext):
-        shared_secret = self.api.crypto_kem_dec_frodo640(ciphertext, self.secret_key)
-        return shared_secret
+    def encapsulate(self, peer_public_key: bytes):
+        self.ciphertext, self.shared_key = self.kem.encap(peer_public_key)
+        return self.ciphertext, self.shared_key
+
+    def decapsulate(self, ciphertext: bytes):
+        self.shared_key = self.kem.decap(ciphertext)
+        return self.shared_key

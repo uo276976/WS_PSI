@@ -1,5 +1,6 @@
 import functools
 import os
+import base64
 
 from flask import Flask, render_template, jsonify, request
 from flask.views import MethodView
@@ -103,8 +104,7 @@ def create_app(test_config=None):
         for impl_obj, handler in node.json_handler.CSHandlers.items():
             try:
                 pubkey = handler.public_key
-                # Serialize the public key
-                pubkeys[impl_obj.name] = {k: str(v) for k, v in vars(pubkey).items()}
+                pubkeys[impl_obj.name] = {"public_key": base64.b64encode(pubkey).decode("utf-8")}
             except AttributeError:
                 continue  # Skip if the handler does not have a public key yet
 
@@ -178,6 +178,34 @@ def create_app(test_config=None):
     def api_test(node):
         device = request.args.get('device')
         return jsonify({'status': node.launch_test(device)})
+    
+    @app.route('/api/test_nike', methods=['POST'])
+    @node_wrapper
+    def test_nike(node):
+        data = request.get_json()
+        device = data.get("device")
+        if not device:
+            return jsonify({"error": "Missing 'device'"}), 400
+
+        handler_map = {
+            "Diffie-Hellman": node.json_handler.DHHandler,
+            "CSIDH": node.json_handler.CSIDHHandler,
+            "Kyber": node.json_handler.KyberHandler,
+            "FrodoKEM": node.json_handler.FrodoKEMHandler,
+            "ClassicMcEliece": node.json_handler.ClassicMcElieceHandler,
+        }
+
+        results = []
+        for name, handler in handler_map.items():
+            helper = node.json_handler.CSHandlers.get(CryptoImplementation.from_string(name))
+            if helper:
+                node.executor.submit(0, handler.intersection_first_step, device, helper)
+                results.append(f"{name} test launched with {device}")
+
+        return jsonify({
+            "status": "NIKE tests launched",
+            "details": results
+        }), 200
 
     @app.route('/api/setup', methods=['POST'])
     @node_wrapper
@@ -200,6 +228,49 @@ def create_app(test_config=None):
     @node_wrapper
     def api_check_tasks(node):
         return jsonify({'status': node.check_tasks()})
+    
+    @app.route('/api/summary', methods=['GET'])
+    @node_wrapper
+    def api_summary(node):
+        logs = Logs.get_logs(node.id)
+        summary = {}
+        categories = {}
+
+        for _, entry in logs.items():
+            if "activity_code" in entry and entry["activity_code"].startswith("INTERSECTION_FINAL_STEP"):
+                parts = entry["activity_code"].split("_")
+                if len(parts) >= 4:
+                    scheme = parts[3]
+                    category = entry.get("category", "Unknown")  # Optional fallback
+
+                    if scheme not in summary:
+                        summary[scheme] = {
+                            "scheme": scheme,
+                            "times": [],
+                            "category": category
+                        }
+
+                    summary[scheme]["times"].append(entry["time"])
+
+                    # Track category
+                    categories[scheme] = category
+
+        output = []
+        for scheme, values in summary.items():
+            avg_time = round(sum(values["times"]) / len(values["times"]), 3)
+            output.append({
+                "scheme": scheme,
+                "avg_time": avg_time,
+                "category": values["category"]
+            })
+
+        unique_categories = sorted(set(categories.values()))
+
+        return jsonify({
+            "summary": output,
+            "categories": unique_categories
+        })
+
 
     # noinspection PyMethodMayBeStatic
     # To be able to use appropriate API methods, GET for status and POST for connect/disconnect

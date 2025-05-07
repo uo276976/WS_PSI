@@ -64,12 +64,14 @@ function update_devices() {
                             <a class="btn-small" onclick="test('${key}')">Test</a>
                             <div class="input-field inline">
                                 <select id="scheme-${key}">
-                                    <option value="Paillier PSI-Domain">Paillier PSI-Domain</option>
-                                    <option value="Damgard-Jurik PSI-Domain">Damgard-Jurik PSI-Domain</option>
-                                    <option value="Paillier OPE">Paillier OPE</option>
-                                    <option value="Damgard-Jurik OPE">Damgard-Jurik OPE</option>
-                                    <option value="Paillier PSI-CA OPE">Cardinality - Paillier</option>
-                                    <option value="Damgard-Jurik PSI-CA OPE">Cardinality - Damgard-Jurik</option>
+                                    <option value="Paillier|PSI-CA">Cardinality - Paillier</option>
+                                    <option value="DamgardJurik|PSI-CA">Cardinality - Damgard-Jurik</option>
+                                    <option value="BFV|OPE">BFV</option>
+                                    <option value="Diffie-Hellman|NIKE">NIKE - DH</option>
+                                    <option value="Kyber|NIKE">NIKE - Kyber</option>
+                                    <option value="CSIDH|NIKE">NIKE - CSIDH</option>
+                                    <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
+                                    <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
                                 </select>
                                 <button class="btn-small btn-dark" onclick="runScheme('${key}')">Iniciar</button>
                             </div>
@@ -165,8 +167,18 @@ function FindIntersection(device, scheme, type, rounds = 1) {
 
 function runScheme(device) {
     const value = $(`#scheme-${device}`).val();
-    const [scheme, type] = value.split(' ');
-    FindIntersection(device, scheme, type || 'OPE');
+    if (!value.includes('|')) {
+        showToast("Invalid scheme format selected.");
+        return;
+    }
+
+    const [scheme, type] = value.split('|');
+    if (!scheme || !type) {
+        showToast("Invalid scheme or type.");
+        return;
+    }
+
+    FindIntersection(device, scheme.trim(), type.trim());
 }
 
 function showToast(message) {

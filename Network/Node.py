@@ -267,11 +267,11 @@ class Node:
         print(f"- {tasks[1]}")
         print(f"============================\n")
 
-    def launch_test(self, device) -> dict:
+    def launch_test(self, device, category_filter=None) -> dict:
         if device in self.devices:
-            self.json_handler.test_launcher(device)
+            self.json_handler.test_launcher(device, category_filter)
             return {
-                "status": f"Test launched with {device}",
+                "status": f"Test launched with {device} - Filter: {category_filter or 'All'}",
                 "results": None
             }
         return {

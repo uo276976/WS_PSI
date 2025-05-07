@@ -1,36 +1,44 @@
-class FrodoKEMHandler:
+import sys
+import base64
+from Crypto.handlers.IntersectionHandler import IntersectionHandler
+from Logs.log_activity import log_activity
+
+
+class FrodoKEMHandler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results):
-        self.id = id
-        self.my_data = my_data
-        self.domain = domain
-        self.devices = devices
-        self.results = results
+        super().__init__(id, my_data, domain, devices, results)
 
+    @log_activity("NIKE")
     def intersection_first_step(self, device, cs):
-        ciphertext, shared_secret = cs.encapsulate(cs.public_key)
-        message = {
-            'peer': self.id,
-            'step': '2',
-            'implementation': 'FrodoKEM',
-            'data': ciphertext,
-            'pubkey': cs.public_key
+        """
+        Peer A sends its public key to peer B
+        """
+        pubkey = {
+            "public_key": base64.b64encode(cs.public_key).decode("utf-8")
         }
-        self.send(device, message)
+        self.send_message(device, None, cs.imp_name + " NIKE", pubkey)
+        return 0, sys.getsizeof(pubkey)
 
-    def intersection_second_step(self, peer, cs, data, pubkey):
-        shared_secret = cs.decapsulate(data)
-        message = {
-            'peer': self.id,
-            'step': 'F',
-            'implementation': 'FrodoKEM',
-            'data': shared_secret
-        }
-        self.send(peer, message)
+    @log_activity("NIKE")
+    def intersection_second_step(self, device, cs, _, peer_pubkey):
+        """
+        Peer B receives public key, encapsulates shared secret and sends ciphertext
+        """
+        peer_key = base64.b64decode(peer_pubkey["public_key"])
+        cs.ciphertext, cs.shared_key = cs.encapsulate(peer_key)
 
-    def intersection_final_step(self, peer, cs, data):
-        # Aquí se podría almacenar o utilizar el shared_secret recibido
-        pass
+        data = base64.b64encode(cs.ciphertext).decode("utf-8")
+        self.send_message(device, None, cs.imp_name + " Ciphertext", data)
+        return 0, sys.getsizeof(data)
 
-    def send(self, device, message):
-        # Implementar el envío del mensaje al dispositivo
-        pass
+    @log_activity("NIKE")
+    def intersection_final_step(self, device, cs, peer_data):
+        """
+        Peer A receives ciphertext and decapsulates the shared secret
+        """
+        ciphertext = base64.b64decode(peer_data)
+        cs.shared_key = cs.decapsulate(ciphertext)
+
+        print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
+        self.results[device + " FrodoKEM SharedKey"] = cs.shared_key.hex()
+        return None, None

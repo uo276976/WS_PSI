@@ -2,11 +2,11 @@ import threading
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from queue import PriorityQueue, Full
+from queue import PriorityQueue, Full, Empty
 
 # Set up logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Prioritized task wrapper
 class PrioritizedItem:
@@ -15,7 +15,7 @@ class PrioritizedItem:
         self.item = item
 
     def __lt__(self, other):
-        return self.priority > other.priority  # Higher priority first
+        return self.priority < other.priority
 
 
 class PriorityExecutor:
@@ -23,7 +23,7 @@ class PriorityExecutor:
         self.max_workers = max_workers
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.queue = PriorityQueue()
-        self.max_tasks_in_queue = 100
+        self.max_tasks_in_queue = 1000
         self.tasks_in_progress = 0
         self._lock = threading.Lock()
         self._shutdown_flag = False
@@ -33,42 +33,33 @@ class PriorityExecutor:
         def run():
             while not self._shutdown_flag:
                 try:
-                    if not self.queue.empty():
-                        with self._lock:
-                            if self.tasks_in_progress >= self.max_workers + self.max_tasks_in_queue:
-                                time.sleep(0.1)
-                                continue
-
-                        prioritized_item = self.queue.get()
-                        if prioritized_item:
-                            func, args, kwargs = prioritized_item.item
-                            future = self.executor.submit(func, *args, **kwargs)
-                            with self._lock:
-                                self.tasks_in_progress += 1
-                            future.add_done_callback(lambda _: self.task_done())
-                            self.queue.task_done()
-                    else:
-                        time.sleep(0.1)
-
+                    prioritized_item = self.queue.get(timeout=0.1)
+                    func, args, kwargs = prioritized_item.item
+                    with self._lock:
+                        self.tasks_in_progress += 1
+                    future = self.executor.submit(func, *args, **kwargs)
+                    future.add_done_callback(lambda _: self.task_done())
+                    self.queue.task_done()
+                except Empty:
+                    pass  # No task available in queue – normal behavior
                 except Exception as e:
                     logger.error(f"[PriorityExecutor] Error in run loop: {e}")
+                    time.sleep(0.1)
 
         threading.Thread(target=run, daemon=True).start()
 
     def submit(self, priority, func, *args, **kwargs):
         try:
-            if self.queue.qsize() < self.max_tasks_in_queue:
-                self.queue.put_nowait(PrioritizedItem(priority, (func, args, kwargs)))
-                logger.debug(f"[PriorityExecutor] Task submitted: {func.__name__} (priority {priority})")
-            else:
-                logger.warning(f"[PriorityExecutor] Task dropped (queue full): {func.__name__}")
+            item = PrioritizedItem(priority, (func, args, kwargs))
+            self.queue.put_nowait(item)
+            logger.debug(f"[PriorityExecutor] Task submitted: {func.__name__} (priority {priority})")
         except Full:
-            logger.warning(f"[PriorityExecutor] Queue full, could not submit task: {func.__name__}")
+            logger.warning(f"[PriorityExecutor] Queue full - Task dropped: {func.__name__}")
 
     def task_done(self):
         with self._lock:
             self.tasks_in_progress -= 1
-            logger.debug(f"[PriorityExecutor] Task finished. In progress: {self.tasks_in_progress}")
+            logger.debug(f"[PriorityExecutor] Task completed. In progress: {self.tasks_in_progress}")
 
     def get_status(self):
         with self._lock:

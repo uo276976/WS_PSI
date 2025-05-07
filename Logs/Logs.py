@@ -77,7 +77,7 @@ class ThreadData:
 
 @firebase_connected
 def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
-                 my_data_size=None, ciphertext_size=None):
+                 my_data_size=None, ciphertext_size=None, scheme=None, category=None):
     timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     log = {
         "id": id,
@@ -90,8 +90,7 @@ def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
         "Peak_RAM": str(thread_data.peak_ram_usage) + " MB",
         "Avg_instance_RAM": str(thread_data.avg_instance_ram_usage) + " MB",
         "Peak_instance_RAM": str(thread_data.peak_instance_ram_usage) + " MB",
-        "Avg_CPU": str(
-            thread_data.avg_cpu_usage) + "% - " + get_cpu_info() if thread_data.avg_cpu_usage != 0 or None else "N/A",
+        "Avg_CPU": str(thread_data.avg_cpu_usage) + "% - " + get_cpu_info() if thread_data.avg_cpu_usage else "N/A",
         "Peak_CPU": str(thread_data.peak_cpu_usage) + "%",
         "Avg_instance_CPU": str(thread_data.avg_instance_cpu_usage) + "%",
         "Peak_instance_CPU": str(thread_data.peak_instance_cpu_usage) + "%",
@@ -100,9 +99,12 @@ def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
         log["peer"] = peer
     if my_data_size is not None:
         log["Cleartext_size"] = str(my_data_size) + " bytes"
-        log["Ciphertext_size"] = str(ciphertext_size) + " bytes"
     if ciphertext_size is not None:
         log["Ciphertext_size"] = str(ciphertext_size) + " bytes"
+    if scheme:
+        log["scheme"] = scheme
+    if category:
+        log["category"] = category
 
     ref = db.reference(f"/logs/{get_formatted_id(id)}/activities")
     ref.push(log)
@@ -247,3 +249,38 @@ def log_result(implementation, result, version, id, device):
 
 def get_formatted_id(id):
     return id.replace(".", "-") if "[" not in id else id.replace("[", "").replace("]", "").replace(".", "-")
+
+@firebase_connected
+def aggregate_by_scheme():
+    ref = db.reference(f"/logs")
+    all_logs = ref.get()
+    if not all_logs:
+        return {}
+
+    from collections import defaultdict
+    summary = defaultdict(list)
+
+    for node_logs in all_logs.values():
+        activities = node_logs.get("activities", {})
+        for entry in activities.values():
+            scheme = entry.get("scheme")
+            if not scheme:
+                continue
+            summary[scheme].append(entry)
+
+    results = []
+    for scheme, entries in summary.items():
+        avg_time = sum(e["time"] for e in entries) / len(entries)
+        avg_cpu = sum(float(e["Avg_CPU"].split('%')[0]) for e in entries if isinstance(e["Avg_CPU"], str) and "%" in e["Avg_CPU"]) / len(entries)
+        avg_ram = sum(float(e["Avg_RAM"].split(' ')[0]) for e in entries if isinstance(e["Avg_RAM"], str)) / len(entries)
+
+        results.append({
+            "scheme": scheme,
+            "category": entries[0].get("category", "Unknown"),
+            "avg_time": round(avg_time, 3),
+            "avg_cpu": round(avg_cpu, 2),
+            "avg_ram": round(avg_ram, 2),
+            "count": len(entries)
+        })
+
+    return results
