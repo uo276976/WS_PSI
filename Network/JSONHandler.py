@@ -66,9 +66,11 @@ class JSONHandler:
         self.new_peer = new_peer_function
 
     def test_launcher(self, device, category_filter=None):
+        print(f"[TEST_LAUNCHER] Device: {device}, Filter: {category_filter}")
         for cs_impl, cs_helper in self.CSHandlers.items():
             if category_filter and cs_impl.category != category_filter:
                 continue  # Skip if not in the desired category
+            
             for _ in range(TEST_ROUNDS):
                 if cs_impl.category == "PSI-Domain":
                     self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs_helper)

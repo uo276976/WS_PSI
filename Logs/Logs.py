@@ -12,6 +12,7 @@ from firebase_admin import credentials, db
 from Network.collections.DbConstants import FB_URL
 
 global default_app
+SAMPLING_INTERVAL = 0.1
 
 
 def connect_firebase():
@@ -183,7 +184,7 @@ def stop_logging_ram_usage(thread_data):
 
 def log_cpu_usage(thread_data):
     while not thread_data.stop_event.is_set():
-        thread_data.cpu_usage.append(psutil.cpu_percent(interval=0.5))
+        thread_data.cpu_usage.append(psutil.cpu_percent(interval=SAMPLING_INTERVAL))
     return
 
 
@@ -208,7 +209,7 @@ def log_instance_cpu_usage(thread_data):
     pid = os.getpid()
     python_process = psutil.Process(pid)
     while not thread_data.stop_event.is_set():
-        percent = python_process.cpu_percent(interval=0.5)
+        percent = python_process.cpu_percent(interval=SAMPLING_INTERVAL)
         thread_data.instance_cpu_usage.append(percent)
     return
 

@@ -1,41 +1,59 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <title>Inicio</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <link rel="stylesheet" href="../static/style.css">
-    <script src="../static/script.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PSI Suite</title>
+
+  <!-- Materialize & Icons -->
+  <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet"/>
+
+  <!-- Styles & scripts -->
+  <link href="../static/style.css" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="../static/script.js" defer></script>
 </head>
 <body>
-    <!--Menú a la izquierda-->
-    <div class="left-menu">
-        <h5>PSI Suite</h5>
-        <p class="details">ID de red: <span id="id"></span></p>
-        <p class="details">Puerto: <span id="port"></span></p>
-        <p class="details"><span id="pending_node"></span></p>
-        <p class="details"><span id="pending_handler"></span></p>
-        <button class="btn waves-effect waves-light" onclick="location.href='/metrics'">Métricas</button>
-        <button class="btn waves-effect waves-light" onclick="results()">Datos</button>
-        <button class="btn waves-effect waves-light" onclick="my_data()">Mi dataset</button>
-        <button class="btn waves-effect waves-light" onclick="mykeys()">Mis claves</button>
-        <button class="btn waves-effect waves-light" onclick="genkeys('Paillier', '2048')">Nuevas claves P</button>
-        <button class="btn waves-effect waves-light" onclick="genkeys('Damgard-Jurik', '2048')">Nuevas claves DJ</button>
-        <button class="btn waves-effect waves-light" onclick="discover_peers()">Buscar peers</button>
-        <button id="connect" class="btn waves-effect waves-light" onclick="connect()">Conectar</button>
-        <button id="disconnect" class="btn waves-effect waves-light red" onclick="disconnect()">Desconectar</button>
-        <button class="btn waves-effect grey darken-3 white-text" onclick="toggleTheme()">🌙 Modo Oscuro</button>
-    </div>
+  <div class="row no-gutters">
+    <!-- SIDEBAR -->
+    <nav class="col s12 m3 l2 grey lighten-4 left-menu hide-on-small-only">
+      <div class="nav-wrapper">
+        <h5 class="center-align">PSI Suite</h5>
+        <ul class="section">
+          <li><span class="details">ID: <strong id="id"></strong></span></li>
+          <li><span class="details">Puerto: <strong id="port"></strong></span></li>
+          <li><span id="pending_node"></span></li>
+          <li><span id="pending_handler"></span></li>
+        </ul>
+        <div class="section">
+          <a class="btn-small waves-effect waves-light" href="/metrics">Métricas</a>
+          <a class="btn-small waves-effect waves-light" onclick="results()">Datos</a>
+          <a class="btn-small waves-effect waves-light" onclick="my_data()">Mi dataset</a>
+          <a class="btn-small waves-effect waves-light" onclick="mykeys()">Mis claves</a>
+          <a class="btn-small waves-effect waves-light" onclick="genkeys('Paillier','2048')">Nuevas P</a>
+          <a class="btn-small waves-effect waves-light" onclick="genkeys('Damgard-Jurik','2048')">Nuevas DJ</a>
+          <a class="btn-small waves-effect waves-light" onclick="discover_peers()">Buscar peers</a>
+          <a id="connect"    class="btn-small waves-effect waves-light" onclick="connect()">Conectar</a>
+          <a id="disconnect" class="btn-small red waves-effect waves-light" onclick="disconnect()">Desconectar</a>
+          <a class="btn-small grey darken-3 white-text" onclick="toggleTheme()">🌙 Modo Oscuro</a>
+        </div>
+      </div>
+    </nav>
 
-    <!--Contenido principal-->
-    <div class="content">
-        <h2 id="devicesConnected">Dispositivos conectados</h2>
-        <div id="devices"></div>
-        <p>Seleccione sobre el dispositivo el criptosistema que quiere utilizar para calcular la intersección</p>
-    </div>
+    <!-- MAIN CONTENT -->
+    <main class="col s12 m9 l10 content">
+      <div class="container">
+        <h4 id="devicesConnected">Dispositivos conectados</h4>
+        <div id="devices" class="row"></div>
+        <p class="guide-text">
+          Elige el criptosistema a usar para calcular la intersección:
+        </p>
+      </div>
+    </main>
+  </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <!-- Materialize JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js" defer></script>
 </body>
 </html>

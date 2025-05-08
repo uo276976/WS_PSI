@@ -179,33 +179,32 @@ def create_app(test_config=None):
         device = request.args.get('device')
         return jsonify({'status': node.launch_test(device)})
     
+    @app.route('/api/test_all', methods=['POST'])
+    @node_wrapper
+    def test_all(node):
+        device = request.args.get('device')
+        return jsonify({'status': node.launch_test(device)})
+
+    @app.route('/api/test_psi', methods=['POST'])
+    @node_wrapper
+    def test_psi(node):
+        device = request.args.get('device')
+        return jsonify({'status': node.launch_test(device, 'PSI-CA')})
+
+    @app.route('/api/test_ope', methods=['POST'])
+    @node_wrapper
+    def test_ope(node):
+        device = request.args.get('device')
+        return jsonify({'status': node.launch_test(device, 'OPE')})
+
     @app.route('/api/test_nike', methods=['POST'])
     @node_wrapper
     def test_nike(node):
-        data = request.get_json()
+        data = request.get_json() or request.args
         device = data.get("device")
         if not device:
             return jsonify({"error": "Missing 'device'"}), 400
-
-        handler_map = {
-            "Diffie-Hellman": node.json_handler.DHHandler,
-            "CSIDH": node.json_handler.CSIDHHandler,
-            "Kyber": node.json_handler.KyberHandler,
-            "FrodoKEM": node.json_handler.FrodoKEMHandler,
-            "ClassicMcEliece": node.json_handler.ClassicMcElieceHandler,
-        }
-
-        results = []
-        for name, handler in handler_map.items():
-            helper = node.json_handler.CSHandlers.get(CryptoImplementation.from_string(name))
-            if helper:
-                node.executor.submit(0, handler.intersection_first_step, device, helper)
-                results.append(f"{name} test launched with {device}")
-
-        return jsonify({
-            "status": "NIKE tests launched",
-            "details": results
-        }), 200
+        return jsonify({'status': node.launch_test(device, 'NIKE')})
 
     @app.route('/api/setup', methods=['POST'])
     @node_wrapper

@@ -1,70 +1,80 @@
 body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-}
-button {
-    margin: 5px;
-}
-#disconnect {
-    background-color: red;
-    color: white;
-}
-.red {
-    background-color: red;
-    color: white;
-}
-table {
-    width: 50%;
-    margin: 20px auto;
-}
-button {
-    margin: 5px;
-}
-.left-menu {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 225px;
-        height: 100%;
-        background-color: #f8f9fa;
-        padding: 20px;
-        overflow: auto;
-}
-.content {
-    margin-left: 220px;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-}
-.details {
-    text-align: center;
+    margin: 0;
+    font-family: 'Roboto', sans-serif;
+  }
+  
+  /* SIDEBAR */
+  .left-menu {
+    height: 100vh;            /* full viewport height */
+    overflow-y: auto;
+    padding: 1rem;
+  }
+  .left-menu .details {
+    display: block;
+    margin-bottom: 0.5rem;
     font-style: italic;
-}
-body.dark-mode {
-    background-color: #121212;
+  }
+  
+  /* MAIN CONTENT */
+  .content {
+    padding: 1.5rem;
+  }
+  
+  /* Device cards */
+  #devices .card {
+    margin-bottom: 1.2rem;
+    border-radius: 8px;
+  }
+  #devices .card .card-title {
+    font-weight: 500;
+    color: #424242;
+  }
+  #devices .card .result-message {
+    min-height: 1.2rem;
+    font-size: 0.9rem;
+  }
+  
+  /* Button groups inside cards */
+  .btn-group {
+    margin-bottom: 1rem;
+  }
+  .btn-group .btn-small {
+    margin-right: 0.3rem;
+  }
+  
+  /* Scheme selector row */
+  .input-field {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+  }
+  .input-field .scheme-selector {
+    flex: 1;
+    margin-right: 0.5rem;
+  }
+  
+  /* Dark mode overrides */
+  body.dark-mode {
+    background: #121212;
     color: #e0e0e0;
-}
-
-.left-menu.dark-mode {
-    background-color: #1e1e1e;
-    color: #fff;
-}
-
-.content.dark-mode {
-    background-color: #121212;
-    color: #e0e0e0;
-}
-
-.card.dark-mode {
-    background-color: #263238;
-    color: #fff;
-}
-
-.btn-dark {
-    background-color: #333 !important;
-    color: white !important;
-}
+  }
+  .left-menu.dark-mode {
+    background: #1e1e1e;
+  }
+  .content.dark-mode {
+    background: #121212;
+  }
+  .card.dark-mode {
+    background: #263238 !important;
+    color: #fff !important;
+  }
+  
+  /* Responsive tweak: show sidebar as a top bar on xs */
+  @media (max-width: 600px) {
+    .left-menu.hide-on-small-only {
+      display: none !important;
+    }
+    .content {
+      margin: 0;
+    }
+  }  

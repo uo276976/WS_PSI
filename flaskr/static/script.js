@@ -40,30 +40,39 @@ function loader() {
 }
 
 function update_devices() {
-    loader();
     $.getJSON('/api/devices', function(data){
-        $('#devices').empty();
+        const $devices = $('#devices');
+        $devices.empty();
+
         if (data.status === nodeNotConnected) {
             $('#devicesConnected').html('<h2>El nodo está apagado</h2>');
-        } else {
-            $('#devicesConnected').html('<h2>Dispositivos registrados</h2>');
-            $.each(data, function(key, value){
-                let displayKey = key;
-                if (/:/.test(key)) {
-                    displayKey = key.replace(/:.*:/, '::');
-                }
-                $('#devices').append(`
-                    <div class="card blue-grey darken-1" id="card-${key}">
-                        <div class="card-content white-text">
+            return;
+        }
+
+        $('#devicesConnected').html('<h2>Dispositivos registrados</h2>');
+
+        let cardsHTML = '<div class="row">';
+
+        $.each(data, function(key, value){
+            let displayKey = key.replace(/:.*:/, '::');
+            let card = `
+                <div class="col s12 m6 l4">
+                    <div class="card z-depth-2" id="card-${key}">
+                        <div class="card-content">
                             <span class="card-title">${displayKey}</span>
                             <p>Última conexión: ${value}</p>
                             <div class="result-message" id="result-${key}" style="margin-top: 10px;"></div>
                         </div>
                         <div class="card-action">
-                            <a class="btn-small" onclick="ping('${key}')">Ping</a>
-                            <a class="btn-small" onclick="test('${key}')">Test</a>
-                            <div class="input-field inline">
-                                <select id="scheme-${key}">
+                            <div class="btn-group" style="margin-bottom: 10px;">
+                                <a class="btn-small green" onclick="ping('${key}')">Ping</a>
+                                <a class="btn-small orange" onclick="testCategory('${key}', 'psi')">Test PSI</a>
+                                <a class="btn-small blue" onclick="testCategory('${key}', 'ope')">Test OPE</a>
+                                <a class="btn-small red" onclick="testCategory('${key}', 'nike')">Test NIKE</a>
+                            </div>
+                            <div class="input-field">
+                                <select class="scheme-selector" data-device="${key}" id="scheme-${key}">
+                                    <option value="" disabled selected>Elige un esquema</option>
                                     <option value="Paillier|PSI-CA">Cardinality - Paillier</option>
                                     <option value="DamgardJurik|PSI-CA">Cardinality - Damgard-Jurik</option>
                                     <option value="BFV|OPE">BFV</option>
@@ -73,16 +82,29 @@ function update_devices() {
                                     <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
                                     <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
                                 </select>
-                                <button class="btn-small btn-dark" onclick="runScheme('${key}')">Iniciar</button>
+                                <button class="btn-small btn-dark scheme-btn" data-device="${key}">Iniciar</button>
                             </div>
                         </div>
                     </div>
-                `);                
-            });
-            $('select').formSelect();
-        }
+                </div>`;
+            cardsHTML += card;
+        });
+
+        cardsHTML += '</div>';
+        $devices.html(cardsHTML);
+        $('select').formSelect();
     });
 }
+
+$(document).on('click', '.ping-btn', function() {
+    const device = $(this).data('device');
+    ping(device);
+});
+
+$(document).on('click', '.scheme-btn', function() {
+    const device = $(this).data('device');
+    runScheme(device);
+});
 
 function ping(device) {
     loader();
@@ -104,6 +126,22 @@ function test(device) {
     })
     .fail(function() {
         const error = "Error returned, likely the node threw an exception. Check the logs.";
+        showToast(error);
+        showResult(device, error);
+    });
+}
+
+function testCategory(device, category) {
+    let endpoint = '/api/test_' + category.toLowerCase();
+
+    $.post(`${endpoint}?device=${device}`, function(data){})
+    .done(function(data) {
+        const message = data.status;
+        showToast(message);
+        showResult(device, message);
+    })
+    .fail(function() {
+        const error = "Test failed. Check the logs.";
         showToast(error);
         showResult(device, error);
     });
@@ -165,20 +203,40 @@ function FindIntersection(device, scheme, type, rounds = 1) {
     });
 }
 
-function runScheme(device) {
-    const value = $(`#scheme-${device}`).val();
+$(document).on('click', '.scheme-btn', function() {
+    const device = $(this).data('device');
+    const value = $(`.scheme-selector[data-device="${device}"]`).val();
+    runScheme(device, value);
+});
+
+function runScheme(device, value) {
     if (!value.includes('|')) {
         showToast("Invalid scheme format selected.");
         return;
     }
 
-    const [scheme, type] = value.split('|');
-    if (!scheme || !type) {
-        showToast("Invalid scheme or type.");
-        return;
-    }
+    const [scheme, type] = value.split('|').map(s => s.trim());
 
-    FindIntersection(device, scheme.trim(), type.trim());
+    if (type === "NIKE") {
+        $.ajax({
+            url: '/api/test_nike',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ device }),
+            success: function(response) {
+                const message = response.status;
+                showToast(message);
+                showResult(device, message + "<br>" + response.details.join("<br>"));
+            },
+            error: function() {
+                const error = "NIKE execution failed. Check logs.";
+                showToast(error);
+                showResult(device, error);
+            }
+        });
+    } else {
+        FindIntersection(device, scheme, type);
+    }
 }
 
 function showToast(message) {

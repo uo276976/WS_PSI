@@ -11,7 +11,13 @@ def log_activity(specific_code):
             start_time = time.time()  # Tiempo de inicio
             thread_data = ThreadData()
             Logs.start_logging(thread_data)
+            
             my_data_size, ciphertext_size = func(self, *args, **kwargs)  # Ejecución de la función
+            
+            elapsed = time.time() - start_time
+            if elapsed < 0.6:
+                time.sleep(0.6 - elapsed)
+            
             end_time = time.time()  # Tiempo de finalización
             Logs.stop_logging(thread_data)
             device = args[0] if len(args) > 0 else None
