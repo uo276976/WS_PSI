@@ -236,15 +236,30 @@ class Node:
     def discover_peers(self):
         print(f"Node {self.id} (You) - Discovering peers on port {self.port}")
         base_ip = "172.18.0."
-        for i in range(2, 10):  # rangos para nodos
+        for i in range(2, 10):
             ip = f"{base_ip}{i}"
             if ip not in self.devices and ip != self.id:
                 try:
                     dealer_socket = self.context.socket(zmq.DEALER)
+                    dealer_socket.setsockopt(zmq.LINGER, 0)
                     dealer_socket.connect(f"tcp://{ip}:{self.port}")
+                    
+                    # Send discover
                     dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
-                    self.devices[ip] = {"socket": dealer_socket, "last_seen": None}
-                    print(f"Node {self.id} (You) - Trying to connect to {ip}")
+                    
+                    # Wait for a reply (timeout)
+                    poller = zmq.Poller()
+                    poller.register(dealer_socket, zmq.POLLIN)
+                    socks = dict(poller.poll(1000))  # 1-second timeout
+                    
+                    if dealer_socket in socks and socks[dealer_socket] == zmq.POLLIN:
+                        reply = dealer_socket.recv_string()
+                        print(f"Node {self.id} - Got reply from {ip}: {reply}")
+                        # Only now add the device
+                        self.devices[ip] = {"socket": dealer_socket, "last_seen": time.strftime("%H:%M:%S", time.localtime())}
+                    else:
+                        dealer_socket.close()
+                        print(f"Node {self.id} - No response from {ip}. Skipping.")
                 except zmq.ZMQError as e:
                     print(f"Error connecting to {ip}: {e}")
 

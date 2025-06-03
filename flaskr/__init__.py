@@ -200,7 +200,10 @@ def create_app(test_config=None):
     @app.route('/api/test_nike', methods=['POST'])
     @node_wrapper
     def test_nike(node):
-        data = request.get_json() or request.args
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form or request.args
         device = data.get("device")
         if not device:
             return jsonify({"error": "Missing 'device'"}), 400

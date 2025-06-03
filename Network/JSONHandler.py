@@ -124,7 +124,11 @@ class JSONHandler:
             elif crypto_impl.category == "PSI-Domain" and type == "PSI-Domain":
                 self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
             elif crypto_impl.category == "NIKE" and type == "NIKE":
-                self.executor.submit(0, cs.intersection_first_step, device, cs)
+                handler = getattr(self, f"{scheme.replace('-', '').replace(' ', '')}Handler", None)
+                if handler:
+                    self.executor.submit(0, handler.intersection_first_step, device, cs)
+                else:
+                    return f"No handler found for {scheme}"
             else:
                 return f"Incompatible scheme {scheme} with type {type}"
 

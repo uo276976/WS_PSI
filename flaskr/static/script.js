@@ -65,10 +65,11 @@ function update_devices() {
                         </div>
                         <div class="card-action">
                             <div class="btn-group" style="margin-bottom: 10px;">
-                                <a class="btn-small green" onclick="ping('${key}')">Ping</a>
+                                <a class="btn-small green ping-btn" data-device="${key}">Ping</a>
                                 <a class="btn-small orange" onclick="testCategory('${key}', 'psi')">Test PSI</a>
                                 <a class="btn-small blue" onclick="testCategory('${key}', 'ope')">Test OPE</a>
                                 <a class="btn-small red" onclick="testCategory('${key}', 'nike')">Test NIKE</a>
+                                <a class="btn-small light-blue" onclick="testCategory('${key}', 'all')">Test All</a>
                             </div>
                             <div class="input-field">
                                 <select class="scheme-selector" data-device="${key}" id="scheme-${key}">
@@ -103,7 +104,8 @@ $(document).on('click', '.ping-btn', function() {
 
 $(document).on('click', '.scheme-btn', function() {
     const device = $(this).data('device');
-    runScheme(device);
+    const value = $(`#scheme-${device}`).val();
+    runScheme(device, value);
 });
 
 function ping(device) {
@@ -210,37 +212,22 @@ $(document).on('click', '.scheme-btn', function() {
 });
 
 function runScheme(device, value) {
-    if (!value.includes('|')) {
-        showToast("Invalid scheme format selected.");
+    if (!value || !value.includes('|')) {
+        showToast("Esquema no válido.");
         return;
     }
 
     const [scheme, type] = value.split('|').map(s => s.trim());
 
-    if (type === "NIKE") {
-        $.ajax({
-            url: '/api/test_nike',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ device }),
-            success: function(response) {
-                const message = response.status;
-                showToast(message);
-                showResult(device, message + "<br>" + response.details.join("<br>"));
-            },
-            error: function() {
-                const error = "NIKE execution failed. Check logs.";
-                showToast(error);
-                showResult(device, error);
-            }
-        });
-    } else {
-        FindIntersection(device, scheme, type);
-    }
+    FindIntersection(device, scheme, type, 1);
 }
 
 function showToast(message) {
-    M.toast({html: message});
+    if (typeof M !== 'undefined' && M.toast) {
+        M.toast({ html: message });
+    } else {
+        alert(message);
+    }
 }
 
 function showResult(device, message) {
@@ -267,32 +254,41 @@ function discover_peers() {
 }
 
 function mykeys() {
-    $.get('/api/mykeys', function(data){
-        const message = "Claves públicas: \n\nPaillier\nn: " + data.pubkeyN + "\ng: " + data.pubkeyG +
-                        "\n\nDamgard-Jurik\nn: " + data.pubkeyNDJ + "\ns: " + data.pubkeySDJ + "\nm: " + data.pubkeyMDJ;
-        window.open().document.write('<pre>' + message + '</pre>');
-    });
+  $.get('/api/mykeys', function(data) {
+    let message = "Claves públicas:\n\n";
+    for (const [scheme, keyObj] of Object.entries(data)) {
+      message += `${scheme}:\n${keyObj.public_key}\n\n`;
+    }
+    const win = window.open();
+    win.document.write('<pre>' + message + '</pre>');
+  });
 }
 
 function my_data() {
-    $.get('/api/dataset', function(data){
-        const message = "Dataset: " + data.dataset;
-        window.open().document.write('<pre>' + message + '</pre>');
-    });
+  $.get('/api/dataset', function(data) {
+    const dataset = data.dataset;
+    const message = `<h3>Mi Dataset</h3><ul>${dataset.map(item => `<li>${item}</li>`).join('')}</ul>`;
+    const win = window.open();
+    win.document.write('<html><body>' + message + '</body></html>');
+  });
 }
 
 function results() {
-    $.get('/api/results', function(data){
-        const message = "Result: " + JSON.stringify(data.result, null, 2);
-        window.open().document.write('<pre>' + message + '</pre>');
-    });
+  $.get('/api/results', function(data) {
+    const result = data.result;
+    const message = `<h3>Resultados</h3><pre>${JSON.stringify(result, null, 2)}</pre>`;
+    const win = window.open();
+    win.document.write('<html><body>' + message + '</body></html>');
+  });
 }
 
 function genkeys(scheme, bitlength) {
-    $.post(`/api/genkeys?scheme=${scheme}&bit_length=${bitlength}`, function(data){
-        const message = data.status;
-        showToast(message);
-    });
+  $.post(`/api/genkeys?scheme=${scheme}&bit_length=${bitlength}`, function(data) {
+    const message = data.status;
+    showToast(`Generación de claves para ${scheme}: ${message}`);
+  }).fail(() => {
+    showToast(`Error al generar claves para ${scheme}.`);
+  });
 }
 
 function check_connection() {
