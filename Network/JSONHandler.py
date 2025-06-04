@@ -58,6 +58,14 @@ class JSONHandler:
         #self.NewHopeHandler = NewHopeHandler(id, my_data, domain, devices, results)
         self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
         self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results)
+                
+        self.NIKEHandlers = {
+            "Diffie-Hellman": self.DHHandler,
+            "CSIDH": self.CSIDHHandler,
+            "Kyber": self.KyberHandler,
+            "FrodoKEM": self.FrodoKEMHandler,
+            "ClassicMcEliece": self.ClassicMcElieceHandler
+        }
 
         # General setup
         self.id = id
@@ -88,6 +96,9 @@ class JSONHandler:
         start_time = time.time()
         thread_data = ThreadData()
         Logs.start_logging(thread_data)
+        
+        device_info = self.devices.get(self.id, {})
+        device_type = device_info.get("type", "Unknown")
 
         cs_helper = self.CSHandlers[crypto_impl]
         if domain is not None:
@@ -107,7 +118,8 @@ class JSONHandler:
             version=VERSION,
             node_id=self.id,
             scheme=cs_helper.imp_name,
-            category=crypto_impl.category
+            category=crypto_impl.category,
+            device_type=device_type
         )
 
     def start_intersection(self, device, scheme, type, rounds) -> str:
@@ -124,7 +136,7 @@ class JSONHandler:
             elif crypto_impl.category == "PSI-Domain" and type == "PSI-Domain":
                 self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
             elif crypto_impl.category == "NIKE" and type == "NIKE":
-                handler = getattr(self, f"{scheme.replace('-', '').replace(' ', '')}Handler", None)
+                handler = self.NIKEHandlers.get(scheme)
                 if handler:
                     self.executor.submit(0, handler.intersection_first_step, device, cs)
                 else:

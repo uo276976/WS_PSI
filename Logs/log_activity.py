@@ -25,7 +25,9 @@ def log_activity(specific_code):
             activity_code = func.__name__.upper() + ("_" + cs.imp_name if cs is not None else "") + "_" + specific_code
             Logs.log_activity(thread_data, activity_code, end_time - start_time,
                               VERSION, self.id, device, my_data_size if my_data_size is not None else None,
-                              ciphertext_size if ciphertext_size is not None else None)
+                              ciphertext_size if ciphertext_size is not None else None,
+                              device_type=getattr(self, "device_type", "Unknown")
+                            )
             print(f"Activity {activity_code} took {end_time - start_time}s")
             return
         return wrapper

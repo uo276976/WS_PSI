@@ -1,6 +1,7 @@
 import random
 import threading
 import time
+import os
 
 import zmq
 
@@ -41,6 +42,7 @@ class Node:
             self.json_handler = JSONHandler(self.id, self.myData, self.domain, self.devices, self.results,
                                             self.new_peer)
             self.executor = PriorityExecutor(max_workers=10)
+            self.device_type = os.getenv("DEVICE_TYPE", "Unknown")
             # Manejador de esquemas criptográficos
 
     def start(self):
@@ -158,7 +160,10 @@ class Node:
         self.devices[peer]["last_seen"] = day_time
 
     def get_devices(self):
-        return {device: info["last_seen"] for device, info in self.devices.items()}
+        return {device: {
+            "last_seen": info["last_seen"],
+            "device_type": getattr(self, "device_type", "Unknown")
+        } for device, info in self.devices.items()}
 
     def ping_device(self, device):
         if device in self.devices:

@@ -78,7 +78,8 @@ class ThreadData:
 
 @firebase_connected
 def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
-                 my_data_size=None, ciphertext_size=None, scheme=None, category=None):
+                 my_data_size=None, ciphertext_size=None, scheme=None, category=None,
+                 device_type=None):
     timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     log = {
         "id": id,
@@ -106,6 +107,8 @@ def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
         log["scheme"] = scheme
     if category:
         log["category"] = category
+    if device_type:
+        log["device_type"] = device_type
 
     ref = db.reference(f"/logs/{get_formatted_id(id)}/activities")
     ref.push(log)

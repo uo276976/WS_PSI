@@ -68,7 +68,27 @@ body {
     background: #263238 !important;
     color: #fff !important;
   }
-  
+  .result-block {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px;
+    margin-top: 4px;
+    background: #f8f8f8;
+}
+
+  /* Styling for IoT devices */
+  .iot-device .card-title { color: #4CAF50; }
+  .iot-device { border-left: 5px solid #4CAF50; }
+
+  /* Styling for Android devices */
+  .android-device .card-title { color: #FF9800; }
+  .android-device { border-left: 5px solid #FF9800; }
+
+  /* Styling for WS devices */
+  .ws-device .card-title { color: #2196F3; }
+  .ws-device { border-left: 5px solid #2196F3; }
+
+
   /* Responsive tweak: show sidebar as a top bar on xs */
   @media (max-width: 600px) {
     .left-menu.hide-on-small-only {

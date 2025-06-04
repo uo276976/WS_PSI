@@ -65,7 +65,12 @@ def create_app(test_config=None):
     @app.route('/api/devices', methods=['GET'])
     @node_wrapper
     def api_devices(node):
-        return jsonify(node.get_devices())
+        node = Node.getinstance()
+        if not node:
+            return jsonify({"status": "Node not connected"})
+
+        devices = node.get_devices()
+        return jsonify(devices)
 
     @app.route('/api/ping/<device>', methods=['POST'])
     @node_wrapper

@@ -55,12 +55,15 @@ function update_devices() {
 
         $.each(data, function(key, value){
             let displayKey = key.replace(/:.*:/, '::');
+            let deviceType = value.device_type || "Desconocido";
+
             let card = `
                 <div class="col s12 m6 l4">
-                    <div class="card z-depth-2" id="card-${key}">
+                    <div class="card z-depth-2 ${deviceType.toLowerCase()}-device" id="card-${key}">
                         <div class="card-content">
                             <span class="card-title">${displayKey}</span>
-                            <p>Última conexión: ${value}</p>
+                            <p><strong>Tipo:</strong> ${deviceType}</p>
+                            <p>Última conexión: ${value.last_seen}</p>
                             <div class="result-message" id="result-${key}" style="margin-top: 10px;"></div>
                         </div>
                         <div class="card-action">
@@ -197,10 +200,30 @@ function FindIntersection(device, scheme, type, rounds = 1) {
         contentType: 'application/json',
         data: JSON.stringify(data),
         dataType: 'json',
-        success: function(data) {
-            const message = data.status;
-            showToast(message);
-            showResult(device, message);
+        success: function(response) {
+            const message = response.status;
+            const successMsg = `<div>
+                <strong>Ejecución finalizada:</strong><br>
+                <strong>Dispositivo:</strong> ${device}<br>
+                <strong>Esquema:</strong> ${scheme}<br>
+                <strong>Tipo:</strong> ${type}<br>
+                <strong>Rondas:</strong> ${rounds}<br>
+                <strong>Estado:</strong> ${message}
+            </div>`;
+            showToast(`${scheme} ejecutado en ${device}`);
+            showResult(device, successMsg);
+        },
+        error: function(xhr, status, error) {
+            const errorMsg = `<div>
+                <strong>Error durante la ejecución</strong><br>
+                <strong>Dispositivo:</strong> ${device}<br>
+                <strong>Esquema:</strong> ${scheme}<br>
+                <strong>Tipo:</strong> ${type}<br>
+                <strong>Rondas:</strong> ${rounds}<br>
+                <strong>Detalles:</strong> ${error || "Error desconocido"}
+            </div>`;
+            showToast(`Error al ejecutar ${scheme} en ${device}`);
+            showResult(device, errorMsg);
         }
     });
 }
@@ -213,11 +236,22 @@ $(document).on('click', '.scheme-btn', function() {
 
 function runScheme(device, value) {
     if (!value || !value.includes('|')) {
-        showToast("Esquema no válido.");
+        showToast("⚠️ Esquema no válido. Selecciona uno para continuar.");
+        showResult(device, `<strong>Error:</strong> No se seleccionó un esquema válido.`);
         return;
     }
 
     const [scheme, type] = value.split('|').map(s => s.trim());
+
+    const startMsg = `<div>
+        <strong>Iniciando algoritmo:</strong><br>
+        <strong>Dispositivo:</strong> ${device}<br>
+        <strong>Esquema:</strong> ${scheme}<br>
+        <strong>Tipo:</strong> ${type}<br>
+        <em>Esperando respuesta...</em>
+    </div>`;
+    showResult(device, startMsg);
+    showToast(`Iniciando algoritmo para ${scheme} (${device})`);
 
     FindIntersection(device, scheme, type, 1);
 }
@@ -231,7 +265,7 @@ function showToast(message) {
 }
 
 function showResult(device, message) {
-    $(`#result-${device}`).html(`<span class="green-text text-lighten-4">${message}</span>`);
+    $(`#result-${device}`).html(`<div class="result-block">${message}</div>`);
 }
 
 function discover_peers() {

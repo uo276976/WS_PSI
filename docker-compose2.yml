@@ -1,6 +1,8 @@
+version: "3.9"
 services:
-  node-1:
+  node-ws-1:
     image: ws-psi
+    container_name: ws-node-1
     ports:
       - "5002:5000"
     networks:
@@ -13,47 +15,74 @@ services:
       - OQS_INSTALL_PATH=/opt/oqs
       - OQS_SKIP_BUILD=1
       - OQS_DIST_SKIP_VERSION_CHECK=1
-  node-2:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  node-android-1:
     image: ws-psi
+    container_name: android-node-1
     ports:
       - "5003:5000"
     networks:
       - container_network
     environment:
       - PORT=5000
-      - DEVICE_TYPE=WS
+      - DEVICE_TYPE=ANDROID
       - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
       - OQS_SKIP_BUILD=1
       - OQS_DIST_SKIP_VERSION_CHECK=1
-  node-3:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.8"
+          memory: 768M
+
+  node-iot-1:
     image: ws-psi
+    container_name: iot-node-1
     ports:
       - "5004:5000"
     networks:
       - container_network
     environment:
       - PORT=5000
-      - DEVICE_TYPE=WS
+      - DEVICE_TYPE=IOT
       - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
       - OQS_SKIP_BUILD=1
       - OQS_DIST_SKIP_VERSION_CHECK=1
-  node-4:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  node-iot-2:
     image: ws-psi
+    container_name: iot-node-2
     ports:
       - "5005:5000"
     networks:
       - container_network
     environment:
       - PORT=5000
-      - DEVICE_TYPE=WS
+      - DEVICE_TYPE=IOT
       - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
       - OQS_SKIP_BUILD=1
       - OQS_DIST_SKIP_VERSION_CHECK=1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: 128M
+
 networks:
   container_network:

@@ -22,6 +22,17 @@ def get_cs_label(name):
         if 'OPE' in name:
             return ' - BFV OPE'
         return ' - BFV Dominio'
+    elif 'Diffie-Hellman' in name:
+        return ' - DH NIKE'
+    elif 'CSIDH' in name:
+        return ' - CSIDH NIKE'
+    elif 'Kyber' in name:
+        return ' - Kyber NIKE'
+    elif 'FrodoKEM' in name:
+        return ' - FrodoKEM NIKE'
+    elif 'ClassicMcEliece' in name:
+        return ' - McEliece NIKE'
+    return ''
 
 
 def get_label(name):
@@ -60,6 +71,13 @@ def get_label(name):
             else:
                 if 'CARDINALITY' in name:
                     return 'Cardinalidad - Descifrado - WS' + get_cs_label(name)
+            
+                # Fallback for known NIKE schemes
+                nike_schemes = ['Diffie-Hellman', 'CSIDH', 'Kyber', 'FrodoKEM', 'ClassicMcEliece']
+                for nike in nike_schemes:
+                    if nike in name:
+                        return f'NIKE - {nike}'
+                # Generic fallback
                 return 'Descifrado - WS' + get_cs_label(name)
 
 
