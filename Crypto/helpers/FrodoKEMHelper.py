@@ -15,9 +15,9 @@ class FrodoKEMHelper:
         self.public_key = self.kem.generate_keypair()
 
     def encapsulate(self, peer_public_key: bytes):
-        self.ciphertext, self.shared_key = self.kem.encap(peer_public_key)
+        self.ciphertext, self.shared_key = self.kem.encap_secret(peer_public_key)
         return self.ciphertext, self.shared_key
 
     def decapsulate(self, ciphertext: bytes):
-        self.shared_key = self.kem.decap(ciphertext)
+        self.shared_key = self.kem.decap_secret(ciphertext)
         return self.shared_key

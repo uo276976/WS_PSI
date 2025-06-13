@@ -17,11 +17,11 @@ class KyberHelper(CSHelper):
         print("[Kyber] Key pair regenerated")
 
     def compute_shared_key(self, peer_pubkey):
-        self.ciphertext, self.shared_key = self.kem.encap(peer_pubkey)
+        self.ciphertext, self.shared_key = self.kem.encap_secret(peer_pubkey)
         print("[Kyber] Shared key encapsulated")
 
     def decapsulate_shared_key(self, ciphertext):
-        self.shared_key = self.kem.decap(ciphertext)
+        self.shared_key = self.kem.decap_secret(ciphertext)
         print("[Kyber] Shared key decapsulated")
 
     def serialize_public_key(self):

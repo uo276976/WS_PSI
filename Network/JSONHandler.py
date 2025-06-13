@@ -146,18 +146,54 @@ class JSONHandler:
 
         return f"Intersection with {device} - {scheme} - {type} - Rounds: {rounds} - Task started, check logs"
 
-    def handle_message(self, message):
+    def handle_message(self, message: str):
         try:
-            message = json.loads(message)
-            print(f"Node {self.id} (You) received: {message}")
-            if message['peer'] not in self.devices:
-                self.new_peer(message['peer'], time.strftime("%H:%M:%S", time.localtime()))
-            if message['step'] == "2":
-                self.handle_intersection_second_step(message)
-            elif message['step'] == "F":
-                self.handle_intersection_final_step(message)
+            msg = json.loads(message)
         except json.JSONDecodeError:
-            print("Received message is not a valid JSON.")
+            print("Received non-JSON message:", message)
+            return
+
+        step = msg.get('step')
+        impl = msg.get('implementation')
+        peer = msg.get('peer')
+        data = msg.get('data')
+        pubkey = msg.get('pubkey')
+
+        # register peer if new
+        if peer not in self.devices:
+            self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()))
+
+        crypto_impl = CryptoImplementation.from_string(impl)
+        if crypto_impl.category != "NIKE":
+            return  # fall back to PSI/OPE handlers
+
+        handler = self.NIKEHandlers.get(crypto_impl.name)
+        cs = self.CSHandlers.get(crypto_impl)
+        if not handler or cs is None:
+            print(f"No handler or CS helper for NIKE scheme {crypto_impl.name}")
+            return
+
+        if step == "1":
+            # Peer has sent us their pubkey → compute & reply
+            self.executor.submit(
+                1,
+                handler.intersection_second_step,
+                peer,
+                cs,
+                None,
+                pubkey
+            )
+        elif step == "2":
+            # Peer has sent back ciphertext (or final DH pubkey) → finalize
+            self.executor.submit(
+                2,
+                handler.intersection_final_step,
+                peer,
+                cs,
+                data
+            )
+        else:
+            print(f"Unknown step {step} for NIKE scheme {crypto_impl.name}")
 
     def handle_intersection_second_step(self, message):
         crypto_impl = CryptoImplementation.from_string(message['implementation'])
@@ -174,7 +210,11 @@ class JSONHandler:
         elif crypto_impl.category == "OPE":
             self.executor.submit(1, self.OPEHandler.intersection_second_step, peer, cs, data, pubkey)
         elif crypto_impl.category == "NIKE":
-            self.executor.submit(1, cs.intersection_second_step, peer, cs, data, pubkey)
+            handler = self.NIKEHandlers.get(crypto_impl.name)
+            if handler:
+                self.executor.submit(1, handler.intersection_second_step, peer, cs, data, pubkey)
+            else:
+                print(f"No handler found for NIKE scheme {crypto_impl.name}")
         else:  # PSI-Domain
             self.executor.submit(1, self.domainPSIHandler.intersection_second_step, peer, cs, data, pubkey)
 
@@ -192,7 +232,11 @@ class JSONHandler:
         elif crypto_impl.category == "OPE":
             self.executor.submit(2, self.OPEHandler.intersection_final_step, peer, cs, data)
         elif crypto_impl.category == "NIKE":
-            self.executor.submit(2, cs.intersection_final_step, peer, cs, data)
+            handler = self.NIKEHandlers.get(crypto_impl.name)
+            if handler:
+                self.executor.submit(2, handler.intersection_final_step, peer, cs, data)
+            else:
+                print(f"No handler found for NIKE scheme {crypto_impl.name}")
         else:  # PSI-Domain
             self.executor.submit(2, self.domainPSIHandler.intersection_final_step, peer, cs, data)
 

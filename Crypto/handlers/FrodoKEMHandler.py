@@ -3,7 +3,6 @@ import base64
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.log_activity import log_activity
 
-
 class FrodoKEMHandler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results):
         super().__init__(id, my_data, domain, devices, results)
@@ -16,7 +15,7 @@ class FrodoKEMHandler(IntersectionHandler):
         pubkey = {
             "public_key": base64.b64encode(cs.public_key).decode("utf-8")
         }
-        self.send_message(device, None, cs.imp_name + " NIKE", pubkey)
+        self.send_message(device, None, cs.imp_name, peer_pubkey=pubkey, step="1")
         return 0, sys.getsizeof(pubkey)
 
     @log_activity("NIKE")
@@ -25,10 +24,11 @@ class FrodoKEMHandler(IntersectionHandler):
         Peer B receives public key, encapsulates shared secret and sends ciphertext
         """
         peer_key = base64.b64decode(peer_pubkey["public_key"])
-        cs.ciphertext, cs.shared_key = cs.encapsulate(peer_key)
-
-        data = base64.b64encode(cs.ciphertext).decode("utf-8")
-        self.send_message(device, None, cs.imp_name + " Ciphertext", data)
+        ct, sk = cs.encapsulate(peer_key)
+        if sk is None:
+            raise RuntimeError("KEM encapsulation failed")
+        data = base64.b64encode(ct).decode("utf-8")
+        self.send_message(device, data, cs.imp_name, step="2")
         return 0, sys.getsizeof(data)
 
     @log_activity("NIKE")

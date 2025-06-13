@@ -289,12 +289,17 @@ function discover_peers() {
 
 function mykeys() {
   $.get('/api/mykeys', function(data) {
-    let message = "Claves públicas:\n\n";
+    let message = "<h3>Claves y claves compartidas</h3>";
     for (const [scheme, keyObj] of Object.entries(data)) {
-      message += `${scheme}:\n${keyObj.public_key}\n\n`;
+      if (keyObj.public_key) {
+        message += `<h4>${scheme}</h4><pre>${keyObj.public_key}</pre>`;
+      } else if (keyObj.shared_key) {
+        message += `<h4>${scheme} (shared)</h4><pre>${keyObj.shared_key}</pre>`;
+      }
     }
+
     const win = window.open();
-    win.document.write('<pre>' + message + '</pre>');
+    win.document.write('<html><body>' + message + '</body></html>');
   });
 }
 
@@ -310,7 +315,30 @@ function my_data() {
 function results() {
   $.get('/api/results', function(data) {
     const result = data.result;
-    const message = `<h3>Resultados</h3><pre>${JSON.stringify(result, null, 2)}</pre>`;
+    let grouped = {};
+
+    for (const [key, value] of Object.entries(result)) {
+      const parts = key.split(" ");
+      const device = parts[0];
+      const rest = parts.slice(1).join(" ");
+
+      if (!grouped[device]) grouped[device] = {};
+      grouped[device][rest] = value;
+    }
+
+    let message = "<h3>Resultados</h3>";
+    for (const [device, entries] of Object.entries(grouped)) {
+      message += `<h4>Dispositivo: ${device}</h4><ul>`;
+      for (const [desc, value] of Object.entries(entries)) {
+        let displayValue = value;
+        if (typeof value === "string" && value.length > 50) {
+          displayValue = value.slice(0, 50) + "...";
+        }
+        message += `<li><strong>${desc}</strong>: <code>${displayValue}</code></li>`;
+      }
+      message += "</ul>";
+    }
+
     const win = window.open();
     win.document.write('<html><body>' + message + '</body></html>');
   });

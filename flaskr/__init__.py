@@ -107,11 +107,23 @@ def create_app(test_config=None):
     def api_pubkey(node):
         pubkeys = {}
         for impl_obj, handler in node.json_handler.CSHandlers.items():
-            try:
-                pubkey = handler.public_key
-                pubkeys[impl_obj.name] = {"public_key": base64.b64encode(pubkey).decode("utf-8")}
-            except AttributeError:
-                continue  # Skip if the handler does not have a public key yet
+            if not hasattr(handler, "public_key"):
+                continue
+
+            pubkey = handler.public_key
+            if pubkey is None:
+                continue
+
+            if isinstance(pubkey, bytes):
+                pubkey_str = base64.b64encode(pubkey).decode("utf-8")
+            else:
+                pubkey_str = str(pubkey)
+
+            pubkeys[impl_obj.name] = {"public_key": pubkey_str}
+
+        for key, value in node.results.items():
+            if "SharedKey" in key:
+                pubkeys[key] = {"shared_key": value}
 
         return jsonify(pubkeys)
 

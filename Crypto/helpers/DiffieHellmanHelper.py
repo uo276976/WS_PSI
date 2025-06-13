@@ -1,5 +1,6 @@
 from Crypto.helpers.CSHelper import CSHelper
 import secrets
+import hashlib
 
 
 class DiffieHellmanHelper(CSHelper):
@@ -25,8 +26,14 @@ class DiffieHellmanHelper(CSHelper):
 
     def compute_shared_key(self, peer_pubkey):
         peer_pubkey = int(peer_pubkey)
-        self.shared_key = pow(peer_pubkey, self.private_key, self.p)
-        print(f"[DH] Shared key computed: {self.shared_key}")
+        shared_secret = pow(peer_pubkey, self.private_key, self.p)
+        print(f"[DH] Shared secret computed: {shared_secret}")
+
+        # Use SHA-256 as a KDF to derive a fixed-length key
+        shared_secret_bytes = str(shared_secret).encode()
+        derived_key = hashlib.sha256(shared_secret_bytes).digest()
+        self.shared_key = derived_key
+        print(f"[DH] Derived key (SHA-256): {derived_key.hex()}")
 
     def serialize_public_key(self):
         return {'public_key': str(self.public_key)}
