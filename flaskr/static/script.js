@@ -85,6 +85,12 @@ function update_devices() {
                                     <option value="CSIDH|NIKE">NIKE - CSIDH</option>
                                     <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
                                     <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
+                                    <option value="NTRU|NIKE">NIKE - NTRU</option>
+                                    <option value="BIKE|NIKE">NIKE - BIKE</option>
+                                    <option value="HQC|NIKE">NIKE - HQC</option>
+                                    <option value="X25519|NIKE">NIKE - X25519</option>
+                                    <option value="P256|NIKE">NIKE - P256</option>
+                                    <option value="HybridSaberX25519|NIKE">NIKE - HybridSaberX25519</option>
                                 </select>
                                 <button class="btn-small btn-dark scheme-btn" data-device="${key}">Iniciar</button>
                             </div>

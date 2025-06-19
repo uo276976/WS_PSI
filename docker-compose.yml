@@ -1,59 +1,96 @@
 services:
+  # --- Workstation nodes ---
   node-1:
     image: ws-psi
-    ports:
-      - "5002:5000"
-    networks:
-      - container_network
+    ports: ["5002:5000"]
+    networks: [container_network]
     environment:
       - PORT=5000
       - DEVICE_TYPE=WS
-      - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
-      - OQS_SKIP_BUILD=1
-      - OQS_DIST_SKIP_VERSION_CHECK=1
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4g
+
   node-2:
     image: ws-psi
-    ports:
-      - "5003:5000"
-    networks:
-      - container_network
+    ports: ["5003:5000"]
+    networks: [container_network]
     environment:
       - PORT=5000
       - DEVICE_TYPE=WS
-      - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
-      - OQS_SKIP_BUILD=1
-      - OQS_DIST_SKIP_VERSION_CHECK=1
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4g
+
+  # --- IoT nodes ---
   node-3:
     image: ws-psi
-    ports:
-      - "5004:5000"
-    networks:
-      - container_network
+    ports: ["5004:5000"]
+    networks: [container_network]
     environment:
       - PORT=5000
-      - DEVICE_TYPE=WS
-      - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
+      - DEVICE_TYPE=IoT
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
-      - OQS_SKIP_BUILD=1
-      - OQS_DIST_SKIP_VERSION_CHECK=1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+
   node-4:
     image: ws-psi
-    ports:
-      - "5005:5000"
-    networks:
-      - container_network
+    ports: ["5005:5000"]
+    networks: [container_network]
     environment:
       - PORT=5000
-      - DEVICE_TYPE=WS
-      - PYTHONPATH=/app/Crypto/csidh_wrapper/liboqs-python
+      - DEVICE_TYPE=IoT
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
-      - OQS_SKIP_BUILD=1
-      - OQS_DIST_SKIP_VERSION_CHECK=1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+
+  # --- Android nodes ---
+  node-5:
+    image: ws-psi
+    ports: ["5006:5000"]
+    networks: [container_network]
+    environment:
+      - PORT=5000
+      - DEVICE_TYPE=Android
+      - LD_LIBRARY_PATH=/opt/oqs/lib
+      - OQS_INSTALL_PATH=/opt/oqs
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2g
+
+  node-6:
+    image: ws-psi
+    ports: ["5007:5000"]
+    networks: [container_network]
+    environment:
+      - PORT=5000
+      - DEVICE_TYPE=Android
+      - LD_LIBRARY_PATH=/opt/oqs/lib
+      - OQS_INSTALL_PATH=/opt/oqs
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2g
+
 networks:
-  container_network:
+  container_network: {}

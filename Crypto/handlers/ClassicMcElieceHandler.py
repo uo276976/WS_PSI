@@ -22,21 +22,18 @@ class ClassicMcElieceHandler(IntersectionHandler):
         Step 2: Encapsulate shared secret and send ciphertext
         """
         peer_key = cs.reconstruct_public_key(peer_pubkey)
-        cs.ciphertext, cs.shared_key = cs.encapsulate(peer_key)
+        cs.compute_shared_key(peer_key)
 
         # Send ciphertext to peer and trigger final step
-        data = base64.b64encode(cs.ciphertext).decode("utf-8")
-        self.send_message(device, None, cs.imp_name, cs.ciphertext, data, step="2")
+        data = cs.get_ciphertext()
+        self.send_message(device, data, cs.imp_name, step="2")
         return 0, sys.getsizeof(data)
 
     @log_activity("NIKE")
     def intersection_final_step(self, device, cs, peer_data):
-        """
-        Step 3: Decapsulate shared secret
-        """
-        ciphertext = base64.b64decode(peer_data)
-        cs.shared_key = cs.decapsulate(ciphertext)
-        print(f"[ClassicMcElieceHandler] Shared key with {device}: {cs.shared_key.hex()}")
+        cs.set_ciphertext(peer_data)
+        cs.decapsulate_shared_key(cs.ciphertext)
 
-        self.results[device + " ClassicMcEliece SharedKey"] = cs.shared_key.hex()
+        print(f"[ClassicMcElieceHandler] Shared key with {device}: {cs.shared_key.hex()}")
+        self.results[f"{device} ClassicMcEliece SharedKey"] = cs.shared_key.hex()
         return None, None

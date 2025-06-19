@@ -71,6 +71,11 @@ def create_app(test_config=None):
 
         devices = node.get_devices()
         return jsonify(devices)
+    
+    @app.route('/api/device_type', methods=['GET'])
+    @node_wrapper
+    def api_device_type(node):
+        return jsonify({"device_type": node.device_type})
 
     @app.route('/api/ping/<device>', methods=['POST'])
     @node_wrapper
@@ -176,10 +181,12 @@ def create_app(test_config=None):
     @node_wrapper
     def api_add_peer(node):
         peer = request.args.get('peer')
+        device_type = request.args.get('device_type', 'Unknown')
+
         if peer is None:
             return jsonify({'status': 'Invalid parameters - No peer provided'})
         if is_valid_ipv4(peer) or is_valid_ipv6(peer):
-            return jsonify({'status': node.new_peer(peer, "Not seen yet")})
+            return jsonify({'status': node.new_peer(peer, "Not seen yet", device_type=device_type)})
         return jsonify({'status': 'Invalid IPv4 or IPv6 address'})
 
     @app.route('/api/logs', methods=['GET'])

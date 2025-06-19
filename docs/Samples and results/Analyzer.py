@@ -9,76 +9,83 @@ from matplotlib import ticker
 from numpy import nan
 
 
-def get_cs_label(name):
-    if 'Damgard-Jurik' in name or 'DamgardJurik' in name:
-        if 'OPE' in name:
-            return ' - Damgard-Jurik OPE'
-        return ' - Damgard-Jurik Dominio'
-    elif 'Paillier' in name:
-        if 'OPE' in name:
-            return ' - Paillier OPE'
-        return ' - Paillier Dominio'
-    elif 'BFV' in name:
-        if 'OPE' in name:
-            return ' - BFV OPE'
-        return ' - BFV Dominio'
-    elif 'Diffie-Hellman' in name:
-        return ' - DH NIKE'
-    elif 'CSIDH' in name:
-        return ' - CSIDH NIKE'
-    elif 'Kyber' in name:
-        return ' - Kyber NIKE'
-    elif 'FrodoKEM' in name:
-        return ' - FrodoKEM NIKE'
-    elif 'ClassicMcEliece' in name:
-        return ' - McEliece NIKE'
-    return ''
+def get_cs_label(name: str) -> str:
+    """
+    Return a consistent, descriptive label for the cryptographic scheme given by 'name'.
+    Recognizes all schemes defined in CryptoImplementation, including new NIKE schemes.
+    """
+    if not name:
+        return "Unknown"
+    name_low = name.lower()
+    # PSI-CA schemes
+    if "paillier" in name_low:
+        return "Paillier"
+    elif "damgardjurik" in name_low or "damg\u00e5rd" in name_low:
+        # Match "DamgardJurik" (with or without accent)
+        return "Damgård-Jurik"
+    elif "caope" in name_low:
+        return "CA-OPE"
+    # PSI-Domain scheme
+    elif "domainpsi" in name_low:
+        return "Domain PSI"
+    # OPE scheme
+    elif name_low == "bfv":
+        return "BFV"
+    # NIKE schemes
+    elif "diffie-hellman" in name_low or "diffiehellman" in name_low:
+        return "Diffie-Hellman"
+    elif name_low == "csidh":
+        return "CSIDH"
+    elif name_low == "x25519" or name_low == "curve25519":
+        # X25519 is an ECDH scheme on Curve25519
+        return "X25519"
+    elif name_low == "p256" or name_low == "p-256":
+        # P-256 is an ECDH scheme on NIST curve P-256
+        return "P-256"
+    elif "kyber" in name_low:
+        # Covers any variant named "Kyber"
+        return "Kyber"
+    elif "classicmceliece" in name_low or "classic-mceliece" in name_low:
+        return "Classic McEliece"
+    elif "frodo" in name_low:
+        # FrodoKEM (Frodo) schemes
+        return "FrodoKEM"
+    elif name_low == "ntru":
+        return "NTRU"
+    elif name_low == "bike":
+        return "BIKE"
+    elif name_low == "hqc":
+        return "HQC"
+    elif "hybrid" in name_low and "kyber" in name_low and "x25519" in name_low:
+        # Hybrid Kyber + X25519 scheme
+        return "Hybrid Kyber/X25519"
+    # Fallback: use the original name if no mapping was found
+    return name
 
 
-def get_label(name):
-    # KEYGEN_DamgardJurik-1024
-    if 'GENKEYS' in name or 'KEYGEN' in name:
-        match = re.match(r'(GENKEYS|KEYGEN)_(DamgardJurik|Damgard-Jurik|Paillier|BFV)-?(\d+)?', name)
-        if match:
-            # el grupo 1 es el tipo de actividad, el grupo 2 es el criptosistema y el grupo 3 son los bits
-            cryptosystem = match.group(2)
-            # Se coge el siguiente valor del grupor de regex si existe, si no se asigna 2048
-            bits = match.group(3) if match.group(3) else '2048'
-            platform = 'WS' if 'GENKEYS' in match.group(1) else 'Android'
-            return f'Generación de claves - {cryptosystem} - {bits} bits - {platform}'
-    else:
-        if '1' in name:
-            if 'CARDINALITY' in name:
-                return 'Cardinalidad - Cifrado - Android' + get_cs_label(name)
-            return 'Cifrado - Android' + get_cs_label(name)
-        elif '2' in name:
-            if 'CARDINALITY' in name:
-                return 'Cardinalidad - Evaluación - Android' + get_cs_label(name)
-            return 'Evaluación - Android' + get_cs_label(name)
-        elif '_F' in name and 'FINAL' not in name and 'FIRST' not in name and 'SECOND' not in name:
-            if 'CARDINALITY' in name:
-                return 'Cardinalidad - Descifrado - Android' + get_cs_label(name)
-            return 'Descifrado - Android' + get_cs_label(name)
-        else:
-            if 'FIRST' in name:
-                if 'CARDINALITY' in name:
-                    return 'Cardinalidad - Cifrado - WS' + get_cs_label(name)
-                return 'Cifrado - WS' + get_cs_label(name)
-            elif 'SECOND' in name:
-                if 'CARDINALITY' in name:
-                    return 'Cardinalidad - Evaluación - WS' + get_cs_label(name)
-                return 'Evaluación - WS' + get_cs_label(name)
-            else:
-                if 'CARDINALITY' in name:
-                    return 'Cardinalidad - Descifrado - WS' + get_cs_label(name)
-            
-                # Fallback for known NIKE schemes
-                nike_schemes = ['Diffie-Hellman', 'CSIDH', 'Kyber', 'FrodoKEM', 'ClassicMcEliece']
-                for nike in nike_schemes:
-                    if nike in name:
-                        return f'NIKE - {nike}'
-                # Generic fallback
-                return 'Descifrado - WS' + get_cs_label(name)
+def get_label(name: str) -> str:
+    """
+    Return a plot label for a given activity 'name', combining scheme label and context.
+    Adds platform context (Android, WS, IoT) and uses get_cs_label for the scheme part.
+    """
+    if not name:  # Fallback if name is empty/None
+        return "Unknown"
+    base_name = name.strip()
+    platform_suffix = ""
+
+    # Normalize for platform types
+    if any(base_name.endswith(suffix) for suffix in [" Android", "-Android", "_Android"]):
+        base_name = re.sub(r'[-_ ]?Android$', '', base_name)
+        platform_suffix = " (Android)"
+    elif any(base_name.endswith(suffix) for suffix in [" WS", "-WS", "_WS"]):
+        base_name = re.sub(r'[-_ ]?WS$', '', base_name)
+        platform_suffix = " (WS)"
+    elif any(base_name.endswith(suffix) for suffix in [" IoT", "-IoT", "_IoT"]):
+        base_name = re.sub(r'[-_ ]?IoT$', '', base_name)
+        platform_suffix = " (IoT)"
+
+    scheme_label = get_cs_label(base_name)
+    return f"{scheme_label}{platform_suffix}"
 
 
 def analyze_activities(ftba, fp):

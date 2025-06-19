@@ -21,10 +21,10 @@ class ClassicMcElieceHelper:
         return base64.b64decode(public_key_dict['public_key'])
 
     def compute_shared_key(self, peer_pubkey):
-        self.ciphertext, self.shared_key = self.kem.encap(peer_pubkey)
+        self.ciphertext, self.shared_key = self.kem.encap_secret(peer_pubkey)
 
     def decapsulate_shared_key(self, ciphertext):
-        self.shared_key = self.kem.decap(ciphertext)
+        self.shared_key = self.kem.decap_secret(ciphertext)
 
     def get_ciphertext(self):
         return base64.b64encode(self.ciphertext).decode('utf-8')

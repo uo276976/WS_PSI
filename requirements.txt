@@ -5,4 +5,3 @@ psutil~=5.9.8
 firebase_admin~=6.5.0
 damgard-jurik~=0.0.3
 pqcrypto~=0.1.3
-oqs~=0.10.2

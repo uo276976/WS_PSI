@@ -19,21 +19,26 @@ class CSIDHHandler(IntersectionHandler):
         peer_bytes = cs.reconstruct_public_key(peer_pubkey)
         cs.compute_shared_key(peer_bytes)
 
-        # *Send* B’s public key back to A
+        # Send B’s public key in the DATA slot, so that
+        # final_step receives it as `peer_data`
         pub_dict = cs.serialize_public_key()
         self.send_message(
             device,
-            None,
-            cs.imp_name,
             pub_dict,
+            cs.imp_name,
             step="2"
         )
+       
         return 0, 0
 
     @log_activity("NIKE")
     def intersection_final_step(self, device, cs, peer_pubkey):
         if cs.shared_key is None:
-            raise RuntimeError("Shared key is missing in final step!")
+            if peer_pubkey:
+                peer_bytes = cs.reconstruct_public_key(peer_pubkey)
+                cs.compute_shared_key(peer_bytes)
+            else:
+                raise RuntimeError("Shared key is missing in final step!")
         
         print(f"[CSIDHHandler] Shared key with {device}: {cs.shared_key.hex()}")
         self.results[f"{device} CSIDH SharedKey"] = cs.shared_key.hex()

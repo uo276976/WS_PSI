@@ -141,14 +141,25 @@ class Node:
         if peer not in self.devices:
             self.new_peer(peer, day_time)
         self.devices[peer]["last_seen"] = day_time
-        self.devices[peer]["socket"].send_string(f"DISCOVER_ACK: Node {self.id} acknowledges node {peer}")
+        self.devices[peer]["socket"].send_string(
+            f"DISCOVER_ACK: Node {self.id} ({self.device_type}) acknowledges node {peer}"
+        )
 
     def handle_discover_ack(self, message, day_time):
-        peer = message.split(" ")[2]
+        parts = message.split(" ")
+        peer = parts[2]
+        device_type = "Unknown"
+
+        for part in parts:
+            if part.startswith("(") and part.endswith(")"):
+                device_type = part.strip("()")
+                break
+
         if peer not in self.devices:
-            self.new_peer(peer, day_time)
+            self.new_peer(peer, day_time, device_type=device_type)
+
         self.devices[peer]["last_seen"] = day_time
-        self.devices[peer]["socket"].send_string(f"Added {peer} to my network - From Node {self.id}")
+        self.devices[peer]["device_type"] = device_type
 
     def handle_added(self, message, day_time):
         peer = message.split(" ")[8]
@@ -228,14 +239,18 @@ class Node:
         self.executor.submit(1, self.json_handler.genkeys, scheme, bit_length)
         return f"Generating {scheme} keys... {'Bit length: ' + str(bit_length) if bit_length else 'Using default'}"
 
-    def new_peer(self, peer, last_seen):
+    def new_peer(self, peer, last_seen, device_type="Unknown"):
         if peer in self.devices:
             return f"Already knew {peer}"
         dealer_socket = self.context.socket(zmq.DEALER)
         dealer_socket.set_hwm(2000)
         dealer_socket.connect(f"tcp://{peer}:{self.port}")
-        self.devices[peer] = {"socket": dealer_socket, "last_seen": last_seen}
-        print(f"Added {peer} to my network")
+        self.devices[peer] = {
+            "socket": dealer_socket,
+            "last_seen": last_seen,
+            "device_type": device_type
+        }
+        print(f"Added {peer} to my network as {device_type}")
         return f"Added {peer} to the network"
 
     def discover_peers(self):
@@ -261,7 +276,7 @@ class Node:
                         reply = dealer_socket.recv_string()
                         print(f"Node {self.id} - Got reply from {ip}: {reply}")
                         # Only now add the device
-                        self.devices[ip] = {"socket": dealer_socket, "last_seen": time.strftime("%H:%M:%S", time.localtime())}
+                        self.new_peer(ip, time.strftime("%H:%M:%S", time.localtime()), device_type="Unknown")
                     else:
                         dealer_socket.close()
                         print(f"Node {self.id} - No response from {ip}. Skipping.")

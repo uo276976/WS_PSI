@@ -7,9 +7,9 @@ from Crypto.handlers.OPEHandler import OPEHandler
 from Crypto.handlers.DHHandler import DHHandler
 from Crypto.handlers.CSIDHHandler import CSIDHHandler
 from Crypto.handlers.KyberHandler import KyberHandler
-#from Crypto.handlers.NewHopeHandler import NewHopeHandler
 from Crypto.handlers.FrodoKEMHandler import FrodoKEMHandler
 from Crypto.handlers.ClassicMcElieceHandler import ClassicMcElieceHandler
+from Crypto.handlers.PQCKEMHandlers import KEMHandler
 from Crypto.helpers.BFVHelper import BFVHelper
 from Crypto.helpers.CryptoImplementation import CryptoImplementation
 from Crypto.helpers.DamgardJurikHandler import DamgardJurikHelper
@@ -17,9 +17,9 @@ from Crypto.helpers.PaillierHandler import PaillierHelper
 from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper
 from Crypto.helpers.CSIDHHelper import CSIDHHelper
 from Crypto.helpers.KyberHelper import KyberHelper
-#from Crypto.helpers.NewHopeHelper import NewHopeHelper
 from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
 from Crypto.helpers.ClassicMcElieceHelper import ClassicMcElieceHelper
+from Crypto.helpers.PQCKEMHelpers import BIKEHelper, HQCHelper, NTRUHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
 from Logs import Logs
 from Logs.Logs import ThreadData
 from Network.PriorityExecutor import PriorityExecutor
@@ -34,17 +34,28 @@ from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 class JSONHandler:
     def __init__(self, id, my_data, domain, devices, results, new_peer_function):
         # Crypto System (CS) Helpers
-        self.CSHandlers = {
-            CryptoImplementation.from_string("Paillier"): PaillierHelper(),
-            CryptoImplementation.from_string("DamgardJurik"): DamgardJurikHelper(),
-            CryptoImplementation.from_string("BFV"): BFVHelper(),
-            CryptoImplementation.from_string("Diffie-Hellman"): DiffieHellmanHelper(),
-            CryptoImplementation.from_string("CSIDH"): CSIDHHelper(),
-            CryptoImplementation.from_string("Kyber"): KyberHelper(),
-            #CryptoImplementation.from_string("NewHope"): NewHopeHelper(),
-            CryptoImplementation.from_string("FrodoKEM"): FrodoKEMHelper(),
-            CryptoImplementation.from_string("ClassicMcEliece"): ClassicMcElieceHelper(),
-        }
+        self.CSHandlers = {}
+        for name, helper in [
+            ("Paillier", PaillierHelper()),
+            ("DamgardJurik", DamgardJurikHelper()),
+            ("BFV", BFVHelper()),
+            ("Diffie-Hellman", DiffieHellmanHelper()),
+            ("CSIDH", CSIDHHelper()),
+            ("Kyber", KyberHelper()),
+            ("FrodoKEM", FrodoKEMHelper()),
+            ("ClassicMcEliece", ClassicMcElieceHelper()),
+            ("BIKE", BIKEHelper()),
+            ("HQC", HQCHelper()),
+            ("NTRU", NTRUHelper()),
+            ("P256", P256Helper()),
+            ("X25519", X25519Helper()),
+            ("HybridKyberX25519", HybridKyberX25519Helper()),
+        ]:
+            cs_impl = CryptoImplementation.from_string(name)
+            if cs_impl:
+                self.CSHandlers[cs_impl] = helper
+            else:
+                print(f"[WARNING] Could not register scheme '{name}' in CSHandlers.")
 
         # Handlers for PSI operations
         self.OPEHandler = OPEHandler(id, my_data, domain, devices, results)
@@ -55,16 +66,30 @@ class JSONHandler:
         self.DHHandler = DHHandler(id, my_data, domain, devices, results)
         self.CSIDHHandler = CSIDHHandler(id, my_data, domain, devices, results)
         self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
-        #self.NewHopeHandler = NewHopeHandler(id, my_data, domain, devices, results)
         self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
         self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results)
+        
+        self.KEMHandlers = {
+            "BIKE": KEMHandler(id, my_data, domain, devices, results, "BIKE-L1"),
+            "HQC": KEMHandler(id, my_data, domain, devices, results, "HQC-128"),
+            "NTRU": KEMHandler(id, my_data, domain, devices, results, "sntrup761"),
+            "P256": KEMHandler(id, my_data, domain, devices, results, "P-256"),
+            "X25519": KEMHandler(id, my_data, domain, devices, results, "X25519"),
+            "HybridKyberX25519": KEMHandler(id, my_data, domain, devices, results, "Hybrid-Kyber-X25519"),
+        }
                 
         self.NIKEHandlers = {
             "Diffie-Hellman": self.DHHandler,
             "CSIDH": self.CSIDHHandler,
             "Kyber": self.KyberHandler,
             "FrodoKEM": self.FrodoKEMHandler,
-            "ClassicMcEliece": self.ClassicMcElieceHandler
+            "ClassicMcEliece": self.ClassicMcElieceHandler,
+            "BIKE": self.KEMHandlers["BIKE"],
+            "HQC": self.KEMHandlers["HQC"],
+            "NTRU": self.KEMHandlers["NTRU"],
+            "P256": self.KEMHandlers["P256"],
+            "X25519": self.KEMHandlers["X25519"],
+            "HybridKyberX25519": self.KEMHandlers["HybridKyberX25519"],
         }
 
         # General setup
@@ -161,7 +186,7 @@ class JSONHandler:
 
         # register peer if new
         if peer not in self.devices:
-            self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()))
+            self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()), device_type="Unknown")
 
         crypto_impl = CryptoImplementation.from_string(impl)
         if crypto_impl.category != "NIKE":
@@ -184,13 +209,17 @@ class JSONHandler:
                 pubkey
             )
         elif step == "2":
-            # Peer has sent back ciphertext (or final DH pubkey) → finalize
+            # Peer has sent back ciphertext → finalize
             self.executor.submit(
                 2,
                 handler.intersection_final_step,
                 peer,
                 cs,
                 data
+            )
+        elif step == "F":
+            self.executor.submit(
+                2, handler.intersection_final_step, peer, cs, pubkey
             )
         else:
             print(f"Unknown step {step} for NIKE scheme {crypto_impl.name}")
