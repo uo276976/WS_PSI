@@ -13,28 +13,40 @@ class PQKEMHelper:
     def __init__(self, alg_name: str):
         self.imp_name = alg_name
         self.kem = oqs.KeyEncapsulation(alg_name)
-        self.public_key = self.kem.generate_keypair()
+        self.public_key_bytes = self.kem.generate_keypair()
         self.secret_key = self.kem.export_secret_key()
+        self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
 
-    def encapsulate(self, peer_public: bytes):
-        ct, sk = self.kem.encap_secret(peer_public)
+    def encapsulate(self, peer_public_b64: Union[str, bytes]):
+        if isinstance(peer_public_b64, str):
+            peer_bytes = base64.b64decode(peer_public_b64)
+        else:
+            peer_bytes = peer_public_b64
+        ct, sk = self.kem.encap_secret(peer_bytes)
+        self._ciphertext = ct
         return ct, sk
 
-    def decapsulate(self, ciphertext: bytes):
+    def decapsulate(self, ciphertext: Union[str, bytes]):
+        if isinstance(ciphertext, str):
+            ciphertext = base64.b64decode(ciphertext)
         return self.kem.decap_secret(ciphertext)
 
-    def serialize_public_key(self):
-        return base64.b64encode(self.public_key).decode("utf-8")
+    def serialize_public_key(self) -> str:
+        return self.public_key
 
-    def decode_public_key(self, pub_input):
+    def decode_public_key(self, pub_input: Union[str, dict]) -> str:
         if isinstance(pub_input, dict):
-            pub_b64 = pub_input.get("public_key")
-        elif isinstance(pub_input, str):
-            pub_b64 = pub_input
-        else:
-            raise ValueError("Unsupported public key format")
+            return pub_input.get("public_key")
+        return pub_input
 
-        return base64.b64decode(pub_b64)
+    def get_ciphertext(self) -> str:
+        return base64.b64encode(self._ciphertext).decode("utf-8")
+
+    def set_ciphertext(self, ct: Union[str, bytes]):
+        if isinstance(ct, str):
+            self.ciphertext = base64.b64decode(ct)
+        else:
+            self.ciphertext = ct
 
 class KyberHelper(PQKEMHelper):
     def __init__(self):
@@ -49,7 +61,7 @@ class ClassicMcElieceHelper(PQKEMHelper):
 class NTRUHelper(PQKEMHelper):
     def __init__(self):
         super().__init__("sntrup761")
-        
+
 
 class BIKEHelper(PQKEMHelper):
     def __init__(self):
@@ -106,14 +118,15 @@ class X25519Helper:
         self.imp_name = "X25519"
         self.priv = x25519.X25519PrivateKey.generate()
         self.pub = self.priv.public_key()
-
-    def serialize_public_key(self):
-        return base64.b64encode(
+        self.public_key = base64.b64encode(
             self.pub.public_bytes(
                 encoding=serialization.Encoding.Raw,
                 format=serialization.PublicFormat.Raw
             )
         ).decode("utf-8")
+
+    def serialize_public_key(self):
+        return self.public_key
 
     def decode_public_key(self, data: Union[bytes, str]):
         if isinstance(data, str):
@@ -121,22 +134,33 @@ class X25519Helper:
         return x25519.X25519PublicKey.from_public_bytes(data)
 
     def encapsulate(self, peer_pub_bytes: bytes):
-        ss = self.priv.exchange(
-            x25519.X25519PublicKey.from_public_bytes(peer_pub_bytes)
-        )
+        ss = self.priv.exchange(x25519.X25519PublicKey.from_public_bytes(peer_pub_bytes))
+        self._ciphertext = peer_pub_bytes
         return peer_pub_bytes, ss
 
     def decapsulate(self, ciphertext: bytes):
         return self.priv.exchange(
             x25519.X25519PublicKey.from_public_bytes(ciphertext)
         )
+        
+    def get_ciphertext(self) -> str:
+        return base64.b64encode(self._ciphertext).decode("utf-8")
 
+    def set_ciphertext(self, ct: Union[str, bytes]):
+        if isinstance(ct, str):
+            self.ciphertext = base64.b64decode(ct)
+        else:
+            self.ciphertext = ct
 
 class P256Helper:
     def __init__(self):
         self.imp_name = "P-256"
         self.priv = ec.generate_private_key(ec.SECP256R1())
         self.pub = self.priv.public_key()
+        self.public_key = self.pub.public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint
+        )
 
     def serialize_public_key(self):
         return self.pub.public_bytes(
@@ -168,6 +192,10 @@ class HybridKyberX25519Helper:
         self.imp_name = "Hybrid-Kyber-X25519"
         self.pq = KyberHelper()
         self.xc = X25519Helper()
+        self.public_key = {
+            "pq": self.pq.serialize_public_key(),
+            "xc": self.xc.serialize_public_key()
+        }
 
     def serialize_public_key(self):
         return {

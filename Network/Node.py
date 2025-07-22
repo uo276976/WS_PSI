@@ -67,7 +67,7 @@ class Node:
         dealer_socket.set_hwm(2000)
         try:
             dealer_socket.connect(f"tcp://{peer}:{self.port}")
-            dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
+            dealer_socket.send_string(f"DISCOVER: Node {self.id} ({self.device_type}) is looking for peers")
             self.devices[peer] = {"socket": dealer_socket, "last_seen": None}
             print(f"[{self.id}] Connection initiated to {peer}")
         except zmq.ZMQError as e:
@@ -137,10 +137,21 @@ class Node:
         self.router_socket.send_multipart([sender, f"{self.id} is up and running!".encode('utf-8')])
 
     def handle_discover(self, message, day_time):
-        peer = message.split(" ")[2]
+        parts = message.split(" ")
+        peer = parts[2]
+        device_type = "Unknown"
+
+        for part in parts:
+            if part.startswith("(") and part.endswith(")"):
+                device_type = part.strip("()")
+                break
+
         if peer not in self.devices:
-            self.new_peer(peer, day_time)
+            self.new_peer(peer, day_time, device_type=device_type)
+
         self.devices[peer]["last_seen"] = day_time
+        self.devices[peer]["device_type"] = device_type
+
         self.devices[peer]["socket"].send_string(
             f"DISCOVER_ACK: Node {self.id} ({self.device_type}) acknowledges node {peer}"
         )
@@ -263,20 +274,27 @@ class Node:
                     dealer_socket = self.context.socket(zmq.DEALER)
                     dealer_socket.setsockopt(zmq.LINGER, 0)
                     dealer_socket.connect(f"tcp://{ip}:{self.port}")
-                    
+
                     # Send discover
-                    dealer_socket.send_string(f"DISCOVER: Node {self.id} is looking for peers")
-                    
-                    # Wait for a reply (timeout)
+                    dealer_socket.send_string(f"DISCOVER: Node {self.id} ({self.device_type}) is looking for peers")
+
                     poller = zmq.Poller()
                     poller.register(dealer_socket, zmq.POLLIN)
                     socks = dict(poller.poll(1000))  # 1-second timeout
-                    
+
                     if dealer_socket in socks and socks[dealer_socket] == zmq.POLLIN:
                         reply = dealer_socket.recv_string()
                         print(f"Node {self.id} - Got reply from {ip}: {reply}")
-                        # Only now add the device
-                        self.new_peer(ip, time.strftime("%H:%M:%S", time.localtime()), device_type="Unknown")
+
+                        # Extract device type from ACK
+                        ack_parts = reply.split(" ")
+                        device_type = "Unknown"
+                        for part in ack_parts:
+                            if part.startswith("(") and part.endswith(")"):
+                                device_type = part.strip("()")
+                                break
+
+                        self.new_peer(ip, time.strftime("%H:%M:%S", time.localtime()), device_type=device_type)
                     else:
                         dealer_socket.close()
                         print(f"Node {self.id} - No response from {ip}. Skipping.")

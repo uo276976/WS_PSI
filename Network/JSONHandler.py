@@ -33,7 +33,6 @@ from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 # 1 and 2 will be executed first to stop consuming memory on the queue
 class JSONHandler:
     def __init__(self, id, my_data, domain, devices, results, new_peer_function):
-        # Crypto System (CS) Helpers
         self.CSHandlers = {}
         for name, helper in [
             ("Paillier", PaillierHelper()),
@@ -51,11 +50,7 @@ class JSONHandler:
             ("X25519", X25519Helper()),
             ("HybridKyberX25519", HybridKyberX25519Helper()),
         ]:
-            cs_impl = CryptoImplementation.from_string(name)
-            if cs_impl:
-                self.CSHandlers[cs_impl] = helper
-            else:
-                print(f"[WARNING] Could not register scheme '{name}' in CSHandlers.")
+            self.CSHandlers[name] = helper
 
         # Handlers for PSI operations
         self.OPEHandler = OPEHandler(id, my_data, domain, devices, results)
@@ -77,7 +72,7 @@ class JSONHandler:
             "X25519": KEMHandler(id, my_data, domain, devices, results, "X25519"),
             "HybridKyberX25519": KEMHandler(id, my_data, domain, devices, results, "Hybrid-Kyber-X25519"),
         }
-                
+
         self.NIKEHandlers = {
             "Diffie-Hellman": self.DHHandler,
             "CSIDH": self.CSIDHHandler,
@@ -92,7 +87,6 @@ class JSONHandler:
             "HybridKyberX25519": self.KEMHandlers["HybridKyberX25519"],
         }
 
-        # General setup
         self.id = id
         self.devices = devices
         self.executor = PriorityExecutor(max_workers=10)
@@ -184,45 +178,37 @@ class JSONHandler:
         data = msg.get('data')
         pubkey = msg.get('pubkey')
 
-        # register peer if new
+        print(f"[DEBUG] handle_message called with step: {step}, impl: {impl}, peer: {peer}")
+
+        # Register peer if new
         if peer not in self.devices:
             self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()), device_type="Unknown")
 
         crypto_impl = CryptoImplementation.from_string(impl)
         if crypto_impl.category != "NIKE":
-            return  # fall back to PSI/OPE handlers
+            print(f"[DEBUG] Skipping non-NIKE scheme: {crypto_impl.name}")
+            return
 
         handler = self.NIKEHandlers.get(crypto_impl.name)
-        cs = self.CSHandlers.get(crypto_impl)
+        cs = self.CSHandlers.get(crypto_impl.name)
+
+        print(f"[DEBUG] Handler found: {bool(handler)}, CS found: {bool(cs)}")
+
         if not handler or cs is None:
-            print(f"No handler or CS helper for NIKE scheme {crypto_impl.name}")
+            print(f"[ERROR] No handler or CS helper for NIKE scheme {crypto_impl.name}")
             return
 
         if step == "1":
-            # Peer has sent us their pubkey → compute & reply
-            self.executor.submit(
-                1,
-                handler.intersection_second_step,
-                peer,
-                cs,
-                None,
-                pubkey
-            )
+            print(f"[DEBUG] Submitting intersection_second_step for {impl}")
+            self.executor.submit(1, handler.intersection_second_step, peer, cs, None, pubkey)
         elif step == "2":
-            # Peer has sent back ciphertext → finalize
-            self.executor.submit(
-                2,
-                handler.intersection_final_step,
-                peer,
-                cs,
-                data
-            )
+            print(f"[DEBUG] Submitting intersection_final_step for {impl}")
+            self.executor.submit(2, handler.intersection_final_step, peer, cs, data)
         elif step == "F":
-            self.executor.submit(
-                2, handler.intersection_final_step, peer, cs, pubkey
-            )
+            print(f"[DEBUG] Submitting final step (F) for {impl}")
+            self.executor.submit(2, handler.intersection_final_step, peer, cs, pubkey)
         else:
-            print(f"Unknown step {step} for NIKE scheme {crypto_impl.name}")
+            print(f"[ERROR] Unknown step {step} for NIKE scheme {crypto_impl.name}")
 
     def handle_intersection_second_step(self, message):
         crypto_impl = CryptoImplementation.from_string(message['implementation'])

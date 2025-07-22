@@ -110,7 +110,9 @@ def create_app(test_config=None):
     @app.route('/api/mykeys', methods=['GET'])
     @node_wrapper
     def api_pubkey(node):
+        import base64
         pubkeys = {}
+
         for impl_obj, handler in node.json_handler.CSHandlers.items():
             if not hasattr(handler, "public_key"):
                 continue
@@ -121,6 +123,13 @@ def create_app(test_config=None):
 
             if isinstance(pubkey, bytes):
                 pubkey_str = base64.b64encode(pubkey).decode("utf-8")
+            elif isinstance(pubkey, dict):
+                pubkey_str = {
+                    k: base64.b64encode(v).decode("utf-8") if isinstance(v, bytes) else str(v)
+                    for k, v in pubkey.items()
+                }
+            elif isinstance(pubkey, str):
+                pubkey_str = pubkey
             else:
                 pubkey_str = str(pubkey)
 
