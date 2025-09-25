@@ -9,36 +9,30 @@ class FrodoKEMHandler(IntersectionHandler):
 
     @log_activity("NIKE")
     def intersection_first_step(self, device, cs):
-        """
-        Peer A sends its public key to peer B
-        """
-        pubkey = {
-            "public_key": base64.b64encode(cs.public_key).decode("utf-8")
-        }
-        self.send_message(device, None, cs.imp_name, peer_pubkey=pubkey, step="1")
-        return 0, sys.getsizeof(pubkey)
+        # Step 1: A envía su pubkey (BASE64 string dentro de dict o string; aquí dict)
+        pubkey = {"public_key": base64.b64encode(cs.public_key).decode("utf-8")}
+        # 4º parámetro = pubkey cuando step="1"
+        self.send_message(device, None, cs.imp_name, pubkey, step="1")
+        return 0, sys.getsizeof(str(pubkey))
 
     @log_activity("NIKE")
     def intersection_second_step(self, device, cs, _, peer_pubkey):
-        """
-        Peer B receives public key, encapsulates shared secret and sends ciphertext
-        """
+        # Step 2: B encapsula con la pubkey de A y envía ciphertext (BASE64 string)
         peer_key = base64.b64decode(peer_pubkey["public_key"])
         ct, sk = cs.encapsulate(peer_key)
         if sk is None:
             raise RuntimeError("KEM encapsulation failed")
         data = base64.b64encode(ct).decode("utf-8")
+        # 4º parámetro = data (ciphertext) cuando step="2"
         self.send_message(device, data, cs.imp_name, step="2")
         return 0, sys.getsizeof(data)
 
     @log_activity("NIKE")
     def intersection_final_step(self, device, cs, peer_data):
-        """
-        Peer A receives ciphertext and decapsulates the shared secret
-        """
+        # Step 3: A decapsula
         ciphertext = base64.b64decode(peer_data)
         cs.shared_key = cs.decapsulate(ciphertext)
 
         print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
-        self.results[device + " FrodoKEM SharedKey"] = cs.shared_key.hex()
+        self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
         return None, None

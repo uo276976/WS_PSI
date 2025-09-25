@@ -6,34 +6,24 @@ class KyberHandler(IntersectionHandler):
 
     @log_activity("NIKE")
     def intersection_first_step(self, device, cs):
-        pubkey = cs.serialize_public_key()
-        size   = sys.getsizeof(str(pubkey))
-        # step="1" → public key
-        self.send_message(device,
-                          None,
-                          cs.imp_name,
-                          peer_pubkey=pubkey,
-                          step="1")
+        pubkey_b64 = cs.serialize_public_key()
+        size = sys.getsizeof(pubkey_b64)
+        self.send_message(device, None, cs.imp_name, peer_pubkey=pubkey_b64, step="1")
         return 0, size
 
     @log_activity("NIKE")
-    def intersection_second_step(self, device, cs, _, peer_pubkey):
-        # receive peer_pubkey, encapsulate, send ciphertext as step="2"
-        peer_key = cs.reconstruct_public_key(peer_pubkey)
-        cs.compute_shared_key(peer_key)
+    def intersection_second_step(self, device, cs, _, peer_pubkey_b64):
+        peer_key_bytes = cs.reconstruct_public_key(peer_pubkey_b64)
+        cs.compute_shared_key(peer_key_bytes)
 
-        ciphertext_hex = cs.ciphertext.hex()
-        size          = sys.getsizeof(ciphertext_hex)
-        self.send_message(device,
-                          ciphertext_hex,
-                          cs.imp_name,
-                          step="2")
+        ciphertext_b64 = cs.get_ciphertext()
+        size = sys.getsizeof(ciphertext_b64)
+        self.send_message(device, ciphertext_b64, cs.imp_name, step="2")
         return 0, size
-    
+
     @log_activity("NIKE")
-    def intersection_final_step(self, device, cs, peer_data):
-        # peer_data is the hex‐ciphertext string
-        ciphertext = bytes.fromhex(peer_data)
+    def intersection_final_step(self, device, cs, peer_ciphertext_b64):
+        ciphertext = base64.b64decode(peer_ciphertext_b64)
         cs.decapsulate_shared_key(ciphertext)
 
         hexkey = cs.shared_key.hex()

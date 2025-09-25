@@ -33,37 +33,36 @@ from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 # 1 and 2 will be executed first to stop consuming memory on the queue
 class JSONHandler:
     def __init__(self, id, my_data, domain, devices, results, new_peer_function):
-        self.CSHandlers = {}
-        for name, helper in [
-            ("Paillier", PaillierHelper()),
-            ("DamgardJurik", DamgardJurikHelper()),
-            ("BFV", BFVHelper()),
-            ("Diffie-Hellman", DiffieHellmanHelper()),
-            ("CSIDH", CSIDHHelper()),
-            ("Kyber", KyberHelper()),
-            ("FrodoKEM", FrodoKEMHelper()),
-            ("ClassicMcEliece", ClassicMcElieceHelper()),
-            ("BIKE", BIKEHelper()),
-            ("HQC", HQCHelper()),
-            ("NTRU", NTRUHelper()),
-            ("P256", P256Helper()),
-            ("X25519", X25519Helper()),
-            ("HybridKyberX25519", HybridKyberX25519Helper()),
-        ]:
-            self.CSHandlers[name] = helper
+        self.CSHandlers = {
+            "Paillier": PaillierHelper(),
+            "DamgardJurik": DamgardJurikHelper(),
+            "BFV": BFVHelper(),
+            "Diffie-Hellman": DiffieHellmanHelper(),
+            "CSIDH": CSIDHHelper(),
+            "Kyber": KyberHelper(),
+            "FrodoKEM": FrodoKEMHelper(),
+            "ClassicMcEliece": ClassicMcElieceHelper(),
+            "BIKE": BIKEHelper(),
+            "HQC": HQCHelper(),
+            "NTRU": NTRUHelper(),
+            "P256": P256Helper(),
+            "X25519": X25519Helper(),
+            "HybridKyberX25519": HybridKyberX25519Helper(),
+        }
 
-        # Handlers for PSI operations
+        # PSI
         self.OPEHandler = OPEHandler(id, my_data, domain, devices, results)
         self.CAOPEHandler = CAOPEHandler(id, my_data, domain, devices, results)
         self.domainPSIHandler = DomainPSIHandler(id, my_data, domain, devices, results)
 
-        # Handlers for NIKEs
+        # NIKE handlers "clásicos"
         self.DHHandler = DHHandler(id, my_data, domain, devices, results)
         self.CSIDHHandler = CSIDHHandler(id, my_data, domain, devices, results)
         self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
         self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
         self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results)
-        
+
+        # KEM genérico
         self.KEMHandlers = {
             "BIKE": KEMHandler(id, my_data, domain, devices, results, "BIKE-L1"),
             "HQC": KEMHandler(id, my_data, domain, devices, results, "HQC-128"),
@@ -73,6 +72,7 @@ class JSONHandler:
             "HybridKyberX25519": KEMHandler(id, my_data, domain, devices, results, "Hybrid-Kyber-X25519"),
         }
 
+        # NIKEHandlers indexados por nombre (string)
         self.NIKEHandlers = {
             "Diffie-Hellman": self.DHHandler,
             "CSIDH": self.CSIDHHandler,
@@ -94,10 +94,11 @@ class JSONHandler:
 
     def test_launcher(self, device, category_filter=None):
         print(f"[TEST_LAUNCHER] Device: {device}, Filter: {category_filter}")
-        for cs_impl, cs_helper in self.CSHandlers.items():
-            if category_filter and cs_impl.category != category_filter:
-                continue  # Skip if not in the desired category
-            
+        for name, cs_helper in self.CSHandlers.items():
+            cs_impl = CryptoImplementation.from_string(name)
+            if category_filter and cs_impl.category.lower() != category_filter.lower():
+                continue
+
             for _ in range(TEST_ROUNDS):
                 if cs_impl.category == "PSI-Domain":
                     self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs_helper)
@@ -106,7 +107,7 @@ class JSONHandler:
                 elif cs_impl.category == "PSI-CA":
                     self.executor.submit(0, self.CAOPEHandler.intersection_first_step, device, cs_helper)
                 elif cs_impl.category == "NIKE":
-                    handler = getattr(self, f"{cs_impl.name.replace('-', '').replace(' ', '')}Handler", None)
+                    handler = self.NIKEHandlers.get(cs_impl.name)
                     if handler:
                         self.executor.submit(0, handler.intersection_first_step, device, cs_helper)
 
@@ -115,11 +116,15 @@ class JSONHandler:
         start_time = time.time()
         thread_data = ThreadData()
         Logs.start_logging(thread_data)
-        
+
         device_info = self.devices.get(self.id, {})
         device_type = device_info.get("type", "Unknown")
 
-        cs_helper = self.CSHandlers[crypto_impl]
+        cs_helper = self.CSHandlers.get(crypto_impl.name)
+        if cs_helper is None:
+            Logs.stop_logging(thread_data)
+            return
+
         if domain is not None:
             cs_helper.generate_keys(bit_length=bit_length, domain=domain)
         else:
@@ -143,10 +148,10 @@ class JSONHandler:
 
     def start_intersection(self, device, scheme, type, rounds) -> str:
         crypto_impl = CryptoImplementation.from_string(scheme)
-        if crypto_impl not in self.CSHandlers:
+        cs = self.CSHandlers.get(crypto_impl.name)
+        if cs is None:
             return "Invalid scheme: " + scheme
 
-        cs = self.CSHandlers[crypto_impl]
         for _ in range(int(rounds)):
             if crypto_impl.category == "OPE" and type == "OPE":
                 self.executor.submit(0, self.OPEHandler.intersection_first_step, device, cs)
@@ -155,7 +160,7 @@ class JSONHandler:
             elif crypto_impl.category == "PSI-Domain" and type == "PSI-Domain":
                 self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
             elif crypto_impl.category == "NIKE" and type == "NIKE":
-                handler = self.NIKEHandlers.get(scheme)
+                handler = self.NIKEHandlers.get(crypto_impl.name)
                 if handler:
                     self.executor.submit(0, handler.intersection_first_step, device, cs)
                 else:
@@ -172,15 +177,14 @@ class JSONHandler:
             print("Received non-JSON message:", message)
             return
 
-        step = msg.get('step')
-        impl = msg.get('implementation')
-        peer = msg.get('peer')
-        data = msg.get('data')
+        step   = msg.get('step')
+        impl   = msg.get('implementation')
+        peer   = msg.get('peer')
+        data   = msg.get('data')
         pubkey = msg.get('pubkey')
 
         print(f"[DEBUG] handle_message called with step: {step}, impl: {impl}, peer: {peer}")
 
-        # Register peer if new
         if peer not in self.devices:
             self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()), device_type="Unknown")
 
@@ -190,10 +194,8 @@ class JSONHandler:
             return
 
         handler = self.NIKEHandlers.get(crypto_impl.name)
-        cs = self.CSHandlers.get(crypto_impl.name)
-
+        cs      = self.CSHandlers.get(crypto_impl.name)
         print(f"[DEBUG] Handler found: {bool(handler)}, CS found: {bool(cs)}")
-
         if not handler or cs is None:
             print(f"[ERROR] No handler or CS helper for NIKE scheme {crypto_impl.name}")
             return
@@ -212,12 +214,12 @@ class JSONHandler:
 
     def handle_intersection_second_step(self, message):
         crypto_impl = CryptoImplementation.from_string(message['implementation'])
-        if crypto_impl not in self.CSHandlers:
+        cs = self.CSHandlers.get(crypto_impl.name)
+        if cs is None:
             raise Exception("Invalid scheme: " + message['implementation'])
 
-        cs = self.CSHandlers[crypto_impl]
-        peer = message['peer']
-        data = message['data']
+        peer   = message['peer']
+        data   = message['data']
         pubkey = message['pubkey']
 
         if crypto_impl.category == "PSI-CA":
@@ -230,15 +232,15 @@ class JSONHandler:
                 self.executor.submit(1, handler.intersection_second_step, peer, cs, data, pubkey)
             else:
                 print(f"No handler found for NIKE scheme {crypto_impl.name}")
-        else:  # PSI-Domain
+        else:
             self.executor.submit(1, self.domainPSIHandler.intersection_second_step, peer, cs, data, pubkey)
 
     def handle_intersection_final_step(self, message):
         crypto_impl = CryptoImplementation.from_string(message['implementation'])
-        if crypto_impl not in self.CSHandlers:
+        cs = self.CSHandlers.get(crypto_impl.name)
+        if cs is None:
             raise Exception("Invalid scheme: " + message['implementation'])
 
-        cs = self.CSHandlers[crypto_impl]
         peer = message['peer']
         data = message['data']
 
@@ -252,6 +254,5 @@ class JSONHandler:
                 self.executor.submit(2, handler.intersection_final_step, peer, cs, data)
             else:
                 print(f"No handler found for NIKE scheme {crypto_impl.name}")
-        else:  # PSI-Domain
+        else:
             self.executor.submit(2, self.domainPSIHandler.intersection_final_step, peer, cs, data)
-

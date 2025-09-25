@@ -1,3 +1,4 @@
+import base64
 import oqs
 from Crypto.helpers.CSHelper import CSHelper
 
@@ -8,30 +9,37 @@ class KyberHelper(CSHelper):
         self.shared_key = None
         self.ciphertext = None
         self.kem = oqs.KeyEncapsulation('Kyber512')
-        self.public_key = self.kem.generate_keypair()
+        self.public_key_bytes = self.kem.generate_keypair()
+        self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
         print("[Kyber] Key pair generated")
 
     def generate_keys(self):
         self.kem = oqs.KeyEncapsulation('Kyber512')
-        self.public_key = self.kem.generate_keypair()
+        self.public_key_bytes = self.kem.generate_keypair()
+        self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
         print("[Kyber] Key pair regenerated")
 
-    def compute_shared_key(self, peer_pubkey):
-        self.ciphertext, self.shared_key = self.kem.encap_secret(peer_pubkey)
+    def serialize_public_key(self) -> str:
+        """Return base64 string of the public key."""
+        return self.public_key
+
+    def reconstruct_public_key(self, peer_pubkey: str) -> bytes:
+        """Accepts base64 string and returns bytes."""
+        return base64.b64decode(peer_pubkey)
+
+    def compute_shared_key(self, peer_pubkey_bytes: bytes):
+        """Encapsulate using peer's public key (bytes)."""
+        self.ciphertext, self.shared_key = self.kem.encap_secret(peer_pubkey_bytes)
         print("[Kyber] Shared key encapsulated")
 
-    def decapsulate_shared_key(self, ciphertext):
+    def decapsulate_shared_key(self, ciphertext: bytes):
+        """Decapsulate shared key from ciphertext bytes."""
         self.shared_key = self.kem.decap_secret(ciphertext)
         print("[Kyber] Shared key decapsulated")
 
-    def serialize_public_key(self):
-        return {'public_key': self.public_key.hex()}
+    def get_ciphertext(self) -> str:
+        """Return base64 ciphertext."""
+        return base64.b64encode(self.ciphertext).decode("utf-8")
 
-    def reconstruct_public_key(self, public_key_dict):
-        return bytes.fromhex(public_key_dict['public_key'])
-
-    def serialize_result(self, result, type=None):
-        return result.hex() if isinstance(result, bytes) else result
-
-    def get_ciphertext(self, value):
-        return value.hex() if isinstance(value, bytes) else str(value)
+    def set_ciphertext(self, ct_b64: str):
+        self.ciphertext = base64.b64decode(ct_b64)

@@ -49,3 +49,7 @@ void derive_shared(uint8_t *shared_buf, uint8_t *peer_pub_buf, uint8_t *priv_buf
 
     memcpy(shared_buf, &shared, SHAREDKEY_SIZE);
 }
+
+size_t csidh_pubkey_size(void)  { return sizeof(public_key);  }
+size_t csidh_privkey_size(void) { return sizeof(private_key); }
+size_t csidh_shared_size(void)  { return sizeof(public_key);  }

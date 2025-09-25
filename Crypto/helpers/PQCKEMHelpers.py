@@ -16,6 +16,7 @@ class PQKEMHelper:
         self.public_key_bytes = self.kem.generate_keypair()
         self.secret_key = self.kem.export_secret_key()
         self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
+        self._ciphertext = None
 
     def encapsulate(self, peer_public_b64: Union[str, bytes]):
         if isinstance(peer_public_b64, str):
@@ -36,17 +37,20 @@ class PQKEMHelper:
 
     def decode_public_key(self, pub_input: Union[str, dict]) -> str:
         if isinstance(pub_input, dict):
-            return pub_input.get("public_key")
+            return pub_input.get("public_key") or ""
         return pub_input
 
     def get_ciphertext(self) -> str:
+        if self._ciphertext is None:
+            return ""
         return base64.b64encode(self._ciphertext).decode("utf-8")
 
     def set_ciphertext(self, ct: Union[str, bytes]):
         if isinstance(ct, str):
-            self.ciphertext = base64.b64decode(ct)
+            self._ciphertext = base64.b64decode(ct)
         else:
-            self.ciphertext = ct
+            self._ciphertext = ct
+        self.ciphertext = self._ciphertext
 
 class KyberHelper(PQKEMHelper):
     def __init__(self):
@@ -124,66 +128,86 @@ class X25519Helper:
                 format=serialization.PublicFormat.Raw
             )
         ).decode("utf-8")
+        self._ciphertext = None
+        self.ciphertext = None
 
-    def serialize_public_key(self):
+    def serialize_public_key(self) -> str:
         return self.public_key
 
-    def decode_public_key(self, data: Union[bytes, str]):
-        if isinstance(data, str):
-            data = base64.b64decode(data)
-        return x25519.X25519PublicKey.from_public_bytes(data)
+    def decode_public_key(self, data: Union[str, dict]) -> str:
+        """Devuelve SIEMPRE base64 (string) listo para encapsulate()."""
+        if isinstance(data, dict):
+            return data.get("public_key")
+        return data
 
-    def encapsulate(self, peer_pub_bytes: bytes):
-        ss = self.priv.exchange(x25519.X25519PublicKey.from_public_bytes(peer_pub_bytes))
-        self._ciphertext = peer_pub_bytes
-        return peer_pub_bytes, ss
+    def _ensure_bytes(self, maybe_b64: Union[str, bytes]) -> bytes:
+        if isinstance(maybe_b64, str):
+            return base64.b64decode(maybe_b64)
+        return maybe_b64
 
-    def decapsulate(self, ciphertext: bytes):
-        return self.priv.exchange(
-            x25519.X25519PublicKey.from_public_bytes(ciphertext)
-        )
-        
+    def encapsulate(self, peer_pub: Union[str, bytes]):
+        """Acepta pubkey en base64 o bytes; genera ss y 'cifra' el peer_pub (KEM-style)."""
+        peer_bytes = self._ensure_bytes(peer_pub)
+        ss = self.priv.exchange(x25519.X25519PublicKey.from_public_bytes(peer_bytes))
+        self._ciphertext = peer_bytes
+        return self._ciphertext, ss
+
+    def decapsulate(self, ciphertext: Union[str, bytes]):
+        ct_bytes = self._ensure_bytes(ciphertext)
+        return self.priv.exchange(x25519.X25519PublicKey.from_public_bytes(ct_bytes))
+
     def get_ciphertext(self) -> str:
         return base64.b64encode(self._ciphertext).decode("utf-8")
 
     def set_ciphertext(self, ct: Union[str, bytes]):
-        if isinstance(ct, str):
-            self.ciphertext = base64.b64decode(ct)
-        else:
-            self.ciphertext = ct
+        self.ciphertext = self._ensure_bytes(ct)
 
 class P256Helper:
     def __init__(self):
         self.imp_name = "P-256"
         self.priv = ec.generate_private_key(ec.SECP256R1())
         self.pub = self.priv.public_key()
-        self.public_key = self.pub.public_bytes(
+        pub_bytes = self.pub.public_bytes(
             encoding=serialization.Encoding.X962,
             format=serialization.PublicFormat.UncompressedPoint
         )
+        self.public_key = base64.b64encode(pub_bytes).decode("utf-8")
+        self._ciphertext = None
+        self.ciphertext = None
 
-    def serialize_public_key(self):
-        return self.pub.public_bytes(
-            encoding=serialization.Encoding.X962,
-            format=serialization.PublicFormat.UncompressedPoint
-        )
+    def serialize_public_key(self) -> str:
+        return self.public_key
 
-    def decode_public_key(self, data: bytes):
-        return ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), data)
+    def decode_public_key(self, data: Union[str, dict]) -> str:
+        """Devuelve SIEMPRE base64 string listo para encapsulate()."""
+        if isinstance(data, dict):
+            return data.get("public_key")
+        return data
 
-    def encapsulate(self, peer_pub_bytes: bytes):
-        peer = ec.EllipticCurvePublicKey.from_encoded_point(
-            ec.SECP256R1(), peer_pub_bytes
-        )
+    def _ensure_bytes(self, maybe_b64: Union[str, bytes]) -> bytes:
+        if isinstance(maybe_b64, str):
+            return base64.b64decode(maybe_b64)
+        return maybe_b64
+
+    def encapsulate(self, peer_pub: Union[str, bytes]):
+        peer_bytes = self._ensure_bytes(peer_pub)
+        peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), peer_bytes)
         sk = self.priv.exchange(ec.ECDH(), peer)
-        return peer_pub_bytes, sk
+        # Igualamos interfaz KEM: el “ciphertext” será el pubkey del emisor (o el peer, según convención).
+        # Mantenemos tu convención: devolver peer_pub como ct (luego get_ciphertext lo b64-iza).
+        self._ciphertext = peer_bytes
+        return self._ciphertext, sk
 
-    def decapsulate(self, ciphertext: bytes):
-        return self.priv.exchange(
-            ec.ECDH(),
-            ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), ciphertext)
-        )
+    def decapsulate(self, ciphertext: Union[str, bytes]):
+        ct_bytes = self._ensure_bytes(ciphertext)
+        peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), ct_bytes)
+        return self.priv.exchange(ec.ECDH(), peer)
 
+    def get_ciphertext(self) -> str:
+        return base64.b64encode(self._ciphertext).decode("utf-8")
+
+    def set_ciphertext(self, ct: Union[str, bytes]):
+        self.ciphertext = self._ensure_bytes(ct)
 
 # --- Hybrid (Kyber + X25519) ---
 
@@ -193,32 +217,36 @@ class HybridKyberX25519Helper:
         self.pq = KyberHelper()
         self.xc = X25519Helper()
         self.public_key = {
-            "pq": self.pq.serialize_public_key(),
-            "xc": self.xc.serialize_public_key()
+            "pq": self.pq.serialize_public_key(),  # str b64
+            "xc": self.xc.serialize_public_key(),  # str b64
         }
 
     def serialize_public_key(self):
         return {
             "pq": self.pq.serialize_public_key(),
-            "xc": self.xc.serialize_public_key()
+            "xc": self.xc.serialize_public_key(),
         }
 
     def decode_public_key(self, d):
+        """Devuelve dict con base64 strings."""
         return {
             "pq": self.pq.decode_public_key(d["pq"]),
-            "xc": self.xc.decode_public_key(d["xc"])
+            "xc": self.xc.decode_public_key(d["xc"]),
         }
 
     def encapsulate(self, peer):
         ct1, ss1 = self.pq.encapsulate(peer["pq"])
-        _, ss2 = self.xc.encapsulate(peer["xc"])
-        # combine
+        _,   ss2 = self.xc.encapsulate(peer["xc"])
         combo = ss1 + ss2
         hkdf = HKDF(hashes.SHA256(), length=32, salt=None, info=b"hybrid")
-        return {"pq": ct1, "xc": peer["xc"]}, hkdf.derive(combo)
+        return {
+            "pq": self.pq.get_ciphertext(),
+            "xc": self.xc.get_ciphertext(),
+        }, hkdf.derive(combo)
 
     def decapsulate(self, ct):
         ss1 = self.pq.decapsulate(ct["pq"])
         ss2 = self.xc.decapsulate(ct["xc"])
         hkdf = HKDF(hashes.SHA256(), length=32, salt=None, info=b"hybrid")
         return hkdf.derive(ss1 + ss2)
+    

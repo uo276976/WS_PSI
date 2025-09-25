@@ -111,12 +111,6 @@ $(document).on('click', '.ping-btn', function() {
     ping(device);
 });
 
-$(document).on('click', '.scheme-btn', function() {
-    const device = $(this).data('device');
-    const value = $(`#scheme-${device}`).val();
-    runScheme(device, value);
-});
-
 function ping(device) {
     loader();
     $.post('/api/ping/' + device, function(data){
@@ -193,7 +187,7 @@ function disconnect() {
     });
 }
 
-function FindIntersection(device, scheme, type, rounds = 1) {
+function findIntersection(device, scheme, type, rounds = 1) {
     const data = {
         "device": device,
         "scheme": scheme,
@@ -236,13 +230,13 @@ function FindIntersection(device, scheme, type, rounds = 1) {
 
 $(document).on('click', '.scheme-btn', function() {
     const device = $(this).data('device');
-    const value = $(`.scheme-selector[data-device="${device}"]`).val();
+    const value = $(`#scheme-${device}`).val();
     runScheme(device, value);
 });
 
 function runScheme(device, value) {
     if (!value || !value.includes('|')) {
-        showToast("⚠️ Esquema no válido. Selecciona uno para continuar.");
+        showToast("Esquema no válido. Selecciona uno para continuar.");
         showResult(device, `<strong>Error:</strong> No se seleccionó un esquema válido.`);
         return;
     }
@@ -259,7 +253,7 @@ function runScheme(device, value) {
     showResult(device, startMsg);
     showToast(`Iniciando algoritmo para ${scheme} (${device})`);
 
-    FindIntersection(device, scheme, type, 1);
+    findIntersection(device, scheme, type, 1);
 }
 
 function showToast(message) {
