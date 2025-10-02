@@ -9,6 +9,8 @@ class KyberHelper(CSHelper):
         self.shared_key = None
         self.ciphertext = None
         self.kem = oqs.KeyEncapsulation('Kyber512')
+        
+        # Generar par de claves inicial
         self.public_key_bytes = self.kem.generate_keypair()
         self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
         print("[Kyber] Key pair generated")
@@ -23,9 +25,14 @@ class KyberHelper(CSHelper):
         """Return base64 string of the public key."""
         return self.public_key
 
-    def reconstruct_public_key(self, peer_pubkey: str) -> bytes:
-        """Accepts base64 string and returns bytes."""
-        return base64.b64decode(peer_pubkey)
+    def reconstruct_public_key(self, peer_pubkey_b64: str) -> bytes:
+        """
+        Reconstruye la clave pública del peer.
+        Acepta string base64 y devuelve bytes.
+        """
+        if isinstance(peer_pubkey_b64, dict):
+            peer_pubkey_b64 = peer_pubkey_b64.get("public_key", peer_pubkey_b64)
+        return base64.b64decode(peer_pubkey_b64)
 
     def compute_shared_key(self, peer_pubkey_bytes: bytes):
         """Encapsulate using peer's public key (bytes)."""

@@ -1,5 +1,3 @@
-from Network import Node
-
 class IntersectionHandler:
     def __init__(self, id, my_data, domain, devices, results):
         self.id = id
@@ -26,7 +24,17 @@ class IntersectionHandler:
         if peer_pubkey is not None:
             msg['pubkey'] = peer_pubkey
 
-        Node.Node.getinstance().send_message(peer, msg)
+        try:
+            # Lazy import inside the function to avoid circular import
+            from Network.Node import Node
+            node = Node.getinstance()
+            if node:
+                node.send_message(peer, msg)
+            else:
+                print(f"[TEST-MOCK] Would send to {peer}: {msg}")
+        except ImportError:
+            # Fallback for unit tests
+            print(f"[TEST-MOCK] Would send to {peer}: {msg}")
 
     def intersection_first_step(self, device, cs):
         raise NotImplementedError

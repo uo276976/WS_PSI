@@ -1,5 +1,6 @@
 import sys
 import base64
+import oqs
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.log_activity import log_activity
 

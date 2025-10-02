@@ -4,8 +4,9 @@ from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.log_activity import log_activity
 
 class FrodoKEMHandler(IntersectionHandler):
-    def __init__(self, id, my_data, domain, devices, results):
+    def __init__(self, id, my_data, domain, devices, results, scheme_name="FrodoKEM"):
         super().__init__(id, my_data, domain, devices, results)
+        self.scheme_name = scheme_name
 
     @log_activity("NIKE")
     def intersection_first_step(self, device, cs):
@@ -22,8 +23,12 @@ class FrodoKEMHandler(IntersectionHandler):
         ct, sk = cs.encapsulate(peer_key)
         if sk is None:
             raise RuntimeError("KEM encapsulation failed")
+
+        # Guardar la clave compartida desde el lado de Bob
+        self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
+        print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
+
         data = base64.b64encode(ct).decode("utf-8")
-        # 4º parámetro = data (ciphertext) cuando step="2"
         self.send_message(device, data, cs.imp_name, step="2")
         return 0, sys.getsizeof(data)
 

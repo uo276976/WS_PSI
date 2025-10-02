@@ -3,6 +3,10 @@ from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.log_activity import log_activity
 
 class DHHandler(IntersectionHandler):
+    def __init__(self, id, my_data, domain, devices, results, scheme_name="Diffie-Hellman"):
+        super().__init__(id, my_data, domain, devices, results)
+        self.scheme_name = scheme_name
+
     @log_activity("NIKE")
     def intersection_first_step(self, device, cs):
         # Step 1: envío pubkey

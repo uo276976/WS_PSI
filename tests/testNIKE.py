@@ -8,9 +8,14 @@ from Crypto.handlers.ClassicMcElieceHandler import ClassicMcElieceHandler
 
 # Helpers (cada handler espera una instancia con la API correspondiente)
 from Crypto.helpers.PQCKEMHelpers import (
-    DHHelper, CSIDHHelper, KyberHelper, FrodoKEMHelper, ClassicMcElieceHelper,
     NTRUHelper, BIKEHelper, HQCHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
 )
+
+from Crypto.helpers.CSIDHHelper import CSIDHHelper
+from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
+from Crypto.helpers.ClassicMcElieceHelper import ClassicMcElieceHelper
+from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper
+from Crypto.helpers.KyberHelper import KyberHelper
 
 class NikeTests(unittest.TestCase):
 
@@ -49,7 +54,7 @@ class NikeTests(unittest.TestCase):
         self.assertEqual(k_a, k_b)
 
     def test_dh(self):
-        self.run_protocol(DHHandler, DHHelper, "DH")
+        self.run_protocol(DHHandler, DiffieHellmanHelper, "DH")
 
     def test_csidh(self):
         self.run_protocol(CSIDHHandler, CSIDHHelper, "CSIDH")
