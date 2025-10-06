@@ -27,8 +27,10 @@ class KyberHandler(IntersectionHandler):
 
     @log_activity("NIKE")
     def intersection_final_step(self, device, cs, peer_ciphertext_b64):
-        ciphertext = base64.b64decode(peer_ciphertext_b64)
-        cs.decapsulate_shared_key(ciphertext)
+        # Solo decapsular si aún no tenemos clave (caso de Alice).
+        if cs.shared_key is None:
+            ciphertext = base64.b64decode(peer_ciphertext_b64)
+            cs.decapsulate_shared_key(ciphertext)
 
         hexkey = cs.shared_key.hex()
         print(f"[KyberHandler] Shared key with {device}: {hexkey}")

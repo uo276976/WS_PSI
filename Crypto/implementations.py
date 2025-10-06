@@ -13,7 +13,6 @@ CryptoImplementation("BFV", "OPE", "BFV_OPE", "BFV OPE")
 
 # NIKE schemes
 CryptoImplementation("Diffie-Hellman", "NIKE", "DH")
-CryptoImplementation("CSIDH", "NIKE")
 CryptoImplementation("Kyber", "NIKE")
 CryptoImplementation("ClassicMcEliece", "NIKE")
 CryptoImplementation("FrodoKEM", "NIKE")

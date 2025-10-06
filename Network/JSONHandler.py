@@ -5,7 +5,6 @@ from Crypto.handlers.CAOPEHandler import CAOPEHandler
 from Crypto.handlers.DomainPSIHandler import DomainPSIHandler
 from Crypto.handlers.OPEHandler import OPEHandler
 from Crypto.handlers.DHHandler import DHHandler
-from Crypto.handlers.CSIDHHandler import CSIDHHandler
 from Crypto.handlers.KyberHandler import KyberHandler
 from Crypto.handlers.FrodoKEMHandler import FrodoKEMHandler
 from Crypto.handlers.ClassicMcElieceHandler import ClassicMcElieceHandler
@@ -15,11 +14,9 @@ from Crypto.helpers.CryptoImplementation import CryptoImplementation
 from Crypto.helpers.DamgardJurikHandler import DamgardJurikHelper
 from Crypto.helpers.PaillierHandler import PaillierHelper
 from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper
-from Crypto.helpers.CSIDHHelper import CSIDHHelper
-from Crypto.helpers.KyberHelper import KyberHelper
 from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
 from Crypto.helpers.ClassicMcElieceHelper import ClassicMcElieceHelper
-from Crypto.helpers.PQCKEMHelpers import BIKEHelper, HQCHelper, NTRUHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
+from Crypto.helpers.PQCKEMHelpers import BIKEHelper, HQCHelper, NTRUHelper, P256Helper, X25519Helper, HybridKyberX25519Helper, KyberHelper
 from Logs import Logs
 from Logs.Logs import ThreadData
 from Network.PriorityExecutor import PriorityExecutor
@@ -38,7 +35,6 @@ class JSONHandler:
             "DamgardJurik": DamgardJurikHelper(),
             "BFV": BFVHelper(),
             "Diffie-Hellman": DiffieHellmanHelper(),
-            "CSIDH": CSIDHHelper(),
             "Kyber": KyberHelper(),
             "FrodoKEM": FrodoKEMHelper(),
             "ClassicMcEliece": ClassicMcElieceHelper(),
@@ -57,8 +53,6 @@ class JSONHandler:
 
         # NIKE handlers "clásicos"
         self.DHHandler = DHHandler(id, my_data, domain, devices, results)
-        self.CSIDHHandler = CSIDHHandler(id, my_data, domain, devices, results)
-        self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
         self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
         self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results)
 
@@ -75,7 +69,6 @@ class JSONHandler:
         # NIKEHandlers indexados por nombre (string)
         self.NIKEHandlers = {
             "Diffie-Hellman": self.DHHandler,
-            "CSIDH": self.CSIDHHandler,
             "Kyber": self.KyberHandler,
             "FrodoKEM": self.FrodoKEMHandler,
             "ClassicMcEliece": self.ClassicMcElieceHandler,

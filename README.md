@@ -28,6 +28,23 @@ Por conveniencia, existe un archivo `setup.sh` que realiza todos estos pasos (pa
 ![waitressdefault.png](docs/waitressdefault.png) \
 Se recomienda usar `waitress` para evaluar las implementaciones, ya que es más rápido y seguro que el servidor de desarrollo de Flask. Simula mejor lo que sería el rendimiento del sistema en producción.
 
+## Activar Criptografía post-cuántica 
+Ejecutar el instalador de PQC
+
+Ejecuta el script de instalación:
+
+chmod +x setup_pqc.sh
+./setup_pqc.sh
+
+
+Este script realiza automáticamente los siguientes pasos:
+
+ - Instala dependencias necesarias del sistema.
+ - Clona y compila liboqs con soporte para algoritmos post-cuánticos.
+ - Instala liboqs-python, la interfaz de Python para liboqs.
+ - Configura la variable LD_LIBRARY_PATH (necesaria para que Python encuentre liboqs).
+ - Verifica que los algoritmos estén disponibles.
+
 **Servidor por defecto**\
 La API REST quedará expuesta en la dirección `http://127.0.0.1:5000/api` y la interfaz gráfica en `http://127.0.0.1:5000/`. \
 Se puede modificar el puerto y la dirección de la API en el arranque del servidor. Ejemplo: `flask --app flaskr:create_app run --port=8000`. La dirección cambiaría con `--host=OTRA_DIRECCION` aunque puede que no se pueda asignar.\

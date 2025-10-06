@@ -16,49 +16,56 @@ def get_cs_label(name: str) -> str:
     """
     if not name:
         return "Unknown"
+
     name_low = name.lower()
+
     # PSI-CA schemes
     if "paillier" in name_low:
         return "Paillier"
-    elif "damgardjurik" in name_low or "damg\u00e5rd" in name_low:
-        # Match "DamgardJurik" (with or without accent)
+    elif "damgardjurik" in name_low or "damgård" in name_low:
         return "Damgård-Jurik"
     elif "caope" in name_low:
         return "CA-OPE"
+
     # PSI-Domain scheme
     elif "domainpsi" in name_low:
         return "Domain PSI"
+
     # OPE scheme
     elif name_low == "bfv":
         return "BFV"
+
     # NIKE schemes
     elif "diffie-hellman" in name_low or "diffiehellman" in name_low:
         return "Diffie-Hellman"
-    elif name_low == "csidh":
-        return "CSIDH"
+
     elif name_low == "x25519" or name_low == "curve25519":
-        # X25519 is an ECDH scheme on Curve25519
         return "X25519"
+
     elif name_low == "p256" or name_low == "p-256":
-        # P-256 is an ECDH scheme on NIST curve P-256
         return "P-256"
+
     elif "kyber" in name_low:
-        # Covers any variant named "Kyber"
         return "Kyber"
+
     elif "classicmceliece" in name_low or "classic-mceliece" in name_low:
         return "Classic McEliece"
+
     elif "frodo" in name_low:
-        # FrodoKEM (Frodo) schemes
         return "FrodoKEM"
+
     elif name_low == "ntru":
         return "NTRU"
-    elif name_low == "bike":
+
+    elif "bike" in name_low:
         return "BIKE"
-    elif name_low == "hqc":
+
+    elif "hqc" in name_low:
         return "HQC"
+
     elif "hybrid" in name_low and "kyber" in name_low and "x25519" in name_low:
-        # Hybrid Kyber + X25519 scheme
         return "Hybrid Kyber/X25519"
+
     # Fallback: use the original name if no mapping was found
     return name
 

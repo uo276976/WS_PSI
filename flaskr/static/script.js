@@ -82,7 +82,6 @@ function update_devices() {
                                     <option value="BFV|OPE">BFV</option>
                                     <option value="Diffie-Hellman|NIKE">NIKE - DH</option>
                                     <option value="Kyber|NIKE">NIKE - Kyber</option>
-                                    <option value="CSIDH|NIKE">NIKE - CSIDH</option>
                                     <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
                                     <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
                                     <option value="NTRU|NIKE">NIKE - NTRU</option>
