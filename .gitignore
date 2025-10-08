@@ -1,21 +1,31 @@
+# Environment and config files
 .env
 env/
 .WS-PSI-ENV
 WS-PSI-ENV/
 
+# Python artifacts
 *.pyc
 __pycache__/
 
+# Instance and test cache
 instance/
-
 .pytest_cache/
 .coverage
 htmlcov/
 
+# Build artifacts
 dist/
 build/
+
+# Documentation and results folders
+docs/SamplesAndResults/Experiments/
+
+# IDE and metadata
 *.egg-info/
 .idea/misc.xml
 .idea/WS_PSI.iml
+
+# Firebase credentials
 FirebaseCredentials.json
 firebase-credentials.json

@@ -39,9 +39,13 @@ class Node:
             self.myData = set(random.sample(range(DEFL_DOMAIN), DEFL_SET_SIZE))  # Datos propios
             self.domain = DEFL_DOMAIN  # Dominio de los números aleatorios sobre los que se trabaja
             self.results = {}  # Resultados de las intersecciones
-            self.json_handler = JSONHandler(self.id, self.myData, self.domain, self.devices, self.results,
-                                            self.new_peer)
+
+            self.device_type = os.getenv("DEVICE_TYPE", "Unknown")
+            
             self.executor = PriorityExecutor(max_workers=10)
+            
+            self.json_handler = JSONHandler(self.id, self.myData, self.domain, self.devices, self.results,
+                                            self.new_peer, device_type=self.device_type)
             self.device_type = os.getenv("DEVICE_TYPE", "Unknown")
             # Manejador de esquemas criptográficos
 
@@ -184,7 +188,7 @@ class Node:
     def get_devices(self):
         return {device: {
             "last_seen": info["last_seen"],
-            "device_type": getattr(self, "device_type", "Unknown")
+            "device_type": info.get("device_type", "Unknown")
         } for device, info in self.devices.items()}
 
     def ping_device(self, device):
@@ -266,7 +270,7 @@ class Node:
 
     def discover_peers(self):
         print(f"Node {self.id} (You) - Discovering peers on port {self.port}")
-        base_ip = "172.18.0."
+        base_ip = ".".join(self.id.split(".")[:-1]) + "."
         for i in range(2, 10):
             ip = f"{base_ip}{i}"
             if ip not in self.devices and ip != self.id:

@@ -14,6 +14,28 @@ from Network.collections.DbConstants import FB_URL
 global default_app
 SAMPLING_INTERVAL = 0.1
 
+DEVICE_PROFILES = {
+    "WS": {
+        "max_cpu_cores": 4,
+        "max_memory_mb": 4096,
+        "description": "Workstation (high performance desktop/server)"
+    },
+    "Android": {
+        "max_cpu_cores": 2,
+        "max_memory_mb": 2048,
+        "description": "Mobile device (mid-range phone/tablet)"
+    },
+    "IoT": {
+        "max_cpu_cores": 1,
+        "max_memory_mb": 256,
+        "description": "Embedded/IoT board (Raspberry Pi / ESP32 class)"
+    },
+    "Unknown": {
+        "max_cpu_cores": psutil.cpu_count(),
+        "max_memory_mb": round(psutil.virtual_memory().total / (1024 ** 2)),
+        "description": "Default host capacity (detected)"
+    }
+}
 
 def connect_firebase():
     global default_app
@@ -80,22 +102,39 @@ class ThreadData:
 def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
                  my_data_size=None, ciphertext_size=None, scheme=None, category=None,
                  device_type=None):
+
+    profile = DEVICE_PROFILES.get(device_type, DEVICE_PROFILES["Unknown"])
+    max_cores = profile["max_cpu_cores"]
+    max_mem = profile["max_memory_mb"]
+
+    # Convert raw metrics to relative ones
+    relative_cpu_load = round(thread_data.avg_instance_cpu_usage / (max_cores * 100) * 100, 2)
+    relative_ram_load = round(thread_data.avg_instance_ram_usage / max_mem * 100, 2)
+
     timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     log = {
         "id": id,
         "timestamp": timestamp,
         "version": version,
-        "Details": "Desktop (Flask): " + get_system_info(),
+        "device_type": device_type,
+        "Details": f"{get_system_info()} - {profile['description']}",
         "activity_code": activity_code,
         "time": round(ttlog, 3),
+
         "Avg_RAM": get_ram_info(thread_data),
-        "Peak_RAM": str(thread_data.peak_ram_usage) + " MB",
-        "Avg_instance_RAM": str(thread_data.avg_instance_ram_usage) + " MB",
-        "Peak_instance_RAM": str(thread_data.peak_instance_ram_usage) + " MB",
-        "Avg_CPU": str(thread_data.avg_cpu_usage) + "% - " + get_cpu_info() if thread_data.avg_cpu_usage else "N/A",
-        "Peak_CPU": str(thread_data.peak_cpu_usage) + "%",
-        "Avg_instance_CPU": str(thread_data.avg_instance_cpu_usage) + "%",
-        "Peak_instance_CPU": str(thread_data.peak_instance_cpu_usage) + "%",
+        "Peak_RAM": f"{thread_data.peak_ram_usage} MB",
+        "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage} MB",
+        "Peak_instance_RAM": f"{thread_data.peak_instance_ram_usage} MB",
+        "Avg_CPU": f"{thread_data.avg_cpu_usage}% - {get_cpu_info()}",
+        "Peak_CPU": f"{thread_data.peak_cpu_usage}%",
+        "Avg_instance_CPU": f"{thread_data.avg_instance_cpu_usage}%",
+        "Peak_instance_CPU": f"{thread_data.peak_instance_cpu_usage}%",
+        
+        "Relative_CPU_Load": f"{relative_cpu_load}%",
+        "Relative_RAM_Load": f"{relative_ram_load}%",
+        "Resource_Profile": profile["description"],
+        "Max_CPU_Cores": max_cores,
+        "Max_Memory_MB": max_mem
     }
     if peer:
         log["peer"] = peer
@@ -139,11 +178,22 @@ def get_logs(id):
 
 
 def start_logging(thread_data):
-    # Iniciar los hilos de registro
-    threads = [threading.Thread(target=log_instance_ram_usage, args=(thread_data,)),
-               threading.Thread(target=log_instance_cpu_usage, args=(thread_data,)),
-               threading.Thread(target=log_cpu_usage, args=(thread_data,)),
-               threading.Thread(target=log_ram_usage, args=(thread_data,))]
+    # Collect one synchronous sample to avoid empty arrays
+    thread_data.cpu_usage.append(psutil.cpu_percent(interval=0.1))
+    thread_data.ram_usage.append(psutil.virtual_memory().used / (1024 ** 2))
+
+    pid = os.getpid()
+    proc = psutil.Process(pid)
+    thread_data.instance_ram_usage.append(round(proc.memory_info().rss / (1024 ** 2), 2))
+    thread_data.instance_cpu_usage.append(proc.cpu_percent(interval=0.1))
+
+    # Start background threads
+    threads = [
+        threading.Thread(target=log_instance_ram_usage, args=(thread_data,)),
+        threading.Thread(target=log_instance_cpu_usage, args=(thread_data,)),
+        threading.Thread(target=log_cpu_usage, args=(thread_data,)),
+        threading.Thread(target=log_ram_usage, args=(thread_data,))
+    ]
     for t in threads:
         t.start()
 
@@ -155,37 +205,36 @@ def stop_logging(thread_data):
 
 
 def stop_logging_cpu_usage(thread_data):
-    result = sum(thread_data.cpu_usage) / len(thread_data.cpu_usage) if len(thread_data.cpu_usage) != 0 else 0
-    thread_data.avg_cpu_usage = round(result, 2) if len(thread_data.cpu_usage) != 0 else 0
-    thread_data.peak_cpu_usage = round(max(thread_data.cpu_usage), 2) if len(thread_data.cpu_usage) != 0 else 0
-    # If len(instance_cpu_usage) == 0, the result will be Na
+    if len(thread_data.cpu_usage) == 0:
+        # fallback to a single psutil reading
+        thread_data.cpu_usage = [psutil.cpu_percent(interval=0.1)]
+    thread_data.avg_cpu_usage = round(sum(thread_data.cpu_usage) / len(thread_data.cpu_usage), 2)
+    thread_data.peak_cpu_usage = round(max(thread_data.cpu_usage), 2)
+
     if len(thread_data.instance_cpu_usage) == 0:
-        thread_data.avg_instance_cpu_usage = 0
-        thread_data.peak_instance_cpu_usage = 0
-        return
-    result = sum(thread_data.instance_cpu_usage) / len(thread_data.instance_cpu_usage)
-    thread_data.avg_instance_cpu_usage = round(result, 2)
+        pid = os.getpid()
+        proc = psutil.Process(pid)
+        thread_data.instance_cpu_usage = [proc.cpu_percent(interval=0.1)]
+    thread_data.avg_instance_cpu_usage = round(sum(thread_data.instance_cpu_usage) / len(thread_data.instance_cpu_usage), 2)
     thread_data.peak_instance_cpu_usage = round(max(thread_data.instance_cpu_usage), 2)
-    return
 
 
 def stop_logging_ram_usage(thread_data):
     if len(thread_data.ram_usage) == 0:
-        thread_data.avg_ram_usage = 0
-        thread_data.peak_ram_usage = 0
-        thread_data.avg_instance_ram_usage = 0
-        thread_data.peak_instance_ram_usage = 0
-        return
-    result = sum(thread_data.ram_usage) / len(thread_data.ram_usage)
-    thread_data.avg_ram_usage = round(result, 2)
+        thread_data.ram_usage = [psutil.virtual_memory().used / (1024 ** 2)]
+    thread_data.avg_ram_usage = round(sum(thread_data.ram_usage) / len(thread_data.ram_usage), 2)
     thread_data.peak_ram_usage = round(max(thread_data.ram_usage), 2)
-    result = sum(thread_data.instance_ram_usage) / len(thread_data.instance_ram_usage)
-    thread_data.avg_instance_ram_usage = round(result, 2)
+
+    if len(thread_data.instance_ram_usage) == 0:
+        pid = os.getpid()
+        proc = psutil.Process(pid)
+        thread_data.instance_ram_usage = [round(proc.memory_info().rss / (1024 ** 2), 2)]
+    thread_data.avg_instance_ram_usage = round(sum(thread_data.instance_ram_usage) / len(thread_data.instance_ram_usage), 2)
     thread_data.peak_instance_ram_usage = round(max(thread_data.instance_ram_usage), 2)
-    return
 
 
 def log_cpu_usage(thread_data):
+    psutil.cpu_percent(interval=None)  # warm-up to avoid 0.0
     while not thread_data.stop_event.is_set():
         thread_data.cpu_usage.append(psutil.cpu_percent(interval=SAMPLING_INTERVAL))
     return
@@ -211,6 +260,7 @@ def log_instance_ram_usage(thread_data):
 def log_instance_cpu_usage(thread_data):
     pid = os.getpid()
     python_process = psutil.Process(pid)
+    python_process.cpu_percent(interval=None)  # warm-up
     while not thread_data.stop_event.is_set():
         percent = python_process.cpu_percent(interval=SAMPLING_INTERVAL)
         thread_data.instance_cpu_usage.append(percent)

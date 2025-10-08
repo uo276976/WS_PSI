@@ -66,9 +66,21 @@
             </div>
         </div>
 
+        <div class="col s12 m6">
+            <label for="deviceTypeFilter">Filtrar por tipo de dispositivo:</label>
+            <select id="deviceTypeFilter" class="browser-default">
+                <option value="All">Todos</option>
+                <option value="WS">Workstation</option>
+                <option value="IoT">IoT</option>
+                <option value="Android">Android</option>
+            </select>
+        </div>
+
         <div class="row">
             <canvas id="metricsChart"></canvas>
         </div>
+
+        <div class="row" id="stats-cards"></div>
 
         <div id="loading-spinner" class="preloader-wrapper big active">
             <div class="spinner-layer spinner-blue-only">

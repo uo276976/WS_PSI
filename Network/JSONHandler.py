@@ -29,7 +29,7 @@ from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 # 2: Intersection final step
 # 1 and 2 will be executed first to stop consuming memory on the queue
 class JSONHandler:
-    def __init__(self, id, my_data, domain, devices, results, new_peer_function):
+    def __init__(self, id, my_data, domain, devices, results, new_peer_function, device_type="Unknown"):
         self.CSHandlers = {
             "Paillier": PaillierHelper(),
             "DamgardJurik": DamgardJurikHelper(),
@@ -53,8 +53,9 @@ class JSONHandler:
 
         # NIKE handlers "clásicos"
         self.DHHandler = DHHandler(id, my_data, domain, devices, results)
-        self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
         self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results)
+        self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
+        self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
 
         # KEM genérico
         self.KEMHandlers = {
@@ -84,6 +85,7 @@ class JSONHandler:
         self.devices = devices
         self.executor = PriorityExecutor(max_workers=10)
         self.new_peer = new_peer_function
+        self.device_type = device_type
 
     def test_launcher(self, device, category_filter=None):
         print(f"[TEST_LAUNCHER] Device: {device}, Filter: {category_filter}")
@@ -110,8 +112,7 @@ class JSONHandler:
         thread_data = ThreadData()
         Logs.start_logging(thread_data)
 
-        device_info = self.devices.get(self.id, {})
-        device_type = device_info.get("type", "Unknown")
+        device_type = self.device_type
 
         cs_helper = self.CSHandlers.get(crypto_impl.name)
         if cs_helper is None:
@@ -179,7 +180,8 @@ class JSONHandler:
         print(f"[DEBUG] handle_message called with step: {step}, impl: {impl}, peer: {peer}")
 
         if peer not in self.devices:
-            self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()), device_type="Unknown")
+            detected_type = msg.get("device_type") or self.device_type or "Unknown"
+            self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()), device_type=detected_type)
 
         crypto_impl = CryptoImplementation.from_string(impl)
         if crypto_impl.category != "NIKE":

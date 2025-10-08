@@ -1,265 +1,262 @@
-$(document).ready(function(){
+$(document).ready(function () {
     $('select').formSelect();
-    update_devices();
-    get_port();
-    get_id();
-    check_connection();
-    setInterval(check_connection, 10000);
-    setInterval(update_devices, 10000);
-    check_tasks();
-
-    // Load saved theme
-    if (localStorage.getItem("darkMode") === "true") {
-        toggleTheme();
-    }
+    initializeDashboard();
 });
 
-let nodeNotConnected = "Node not connected";
+const NODE_NOT_CONNECTED = "Node not connected";
+const DEVICE_REFRESH_INTERVAL = 10000;
+const TASK_REFRESH_INTERVAL = 1000;
 
-function get_id() {
-    $.get('/api/id', function(data){
-        $('#id').text(data.id);
+function initializeDashboard() {
+    getNodeId();
+    getNodePort();
+    updateDevices();
+    checkConnection();
+    refreshTasks();
+
+    setInterval(checkConnection, DEVICE_REFRESH_INTERVAL);
+    setInterval(updateDevices, DEVICE_REFRESH_INTERVAL);
+
+    $(document).on('click', '.ping-btn', function () {
+        pingDevice($(this).data('device'));
+    });
+
+    $(document).on('click', '.scheme-btn', function () {
+        const device = $(this).data('device');
+        const value = $(`#scheme-${device}`).val();
+        runScheme(device, value);
     });
 }
 
-function get_port() {
-    $.get('/api/port', function(data){
-        $('#port').text(data.port);
-    });
+function getNodeId() {
+    $.get('/api/id')
+        .done(data => $('#id').text(data.id))
+        .fail(() => showToast("Failed to retrieve node ID"));
 }
 
-function loader() {
-    $('#devices').html(`
-        <div class="preloader-wrapper small active">
-            <div class="spinner-layer spinner-green-only">
-                <div class="circle-clipper left"><div class="circle"></div></div>
-                <div class="gap-patch"><div class="circle"></div></div>
-                <div class="circle-clipper right"><div class="circle"></div></div>
+function getNodePort() {
+    $.get('/api/port')
+        .done(data => $('#port').text(data.port))
+        .fail(() => showToast("Failed to retrieve port"));
+}
+
+function updateDevices() {
+  $.getJSON('/api/devices')
+    .done(data => {
+      const $devices = $('#devices');
+      $devices.empty();
+
+      if (data.status === NODE_NOT_CONNECTED) {
+        $('#devicesConnected').html('<h2>The node is offline</h2>');
+        return;
+      }
+
+      if (Object.keys(data).length === 0) {
+        $('#devicesConnected').html('<h2>No peers discovered yet</h2>');
+        $devices.html('<p class="grey-text">Try clicking <strong>"Discover Peers"</strong> to search for nodes in the network.</p>');
+        return;
+      }
+
+      $('#devicesConnected').html('<h2>Registered devices</h2>');
+      let cardsHTML = '<div class="row">';
+
+      $.each(data, (key, value) => {
+        let displayKey = key.replace(/:.*:/, '::');
+        let deviceType = value.device_type || "Unknown";
+
+        cardsHTML += `
+          <div class="col s12 m6 l4">
+            <div class="card z-depth-2 ${deviceType.toLowerCase()}-device" id="card-${key}">
+              <div class="card-content">
+                <span class="card-title">${displayKey}</span>
+                <p><strong>Type:</strong> ${deviceType}</p>
+                <p>Last seen: ${value.last_seen || "N/A"}</p>
+                <div class="result-message" id="result-${key}" style="margin-top: 10px;"></div>
+              </div>
+              <div class="card-action">
+                <div class="btn-group" style="margin-bottom: 10px;">
+                  <a class="btn-small green ping-btn" data-device="${key}">Ping</a>
+                  <a class="btn-small orange" data-category="psi" data-device="${key}">Test PSI</a>
+                  <a class="btn-small blue" data-category="ope" data-device="${key}">Test OPE</a>
+                  <a class="btn-small red" data-category="nike" data-device="${key}">Test NIKE</a>
+                  <a class="btn-small light-blue" data-category="all" data-device="${key}">Test All</a>
+                </div>
+                <div class="input-field">
+                  <select class="scheme-selector" data-device="${key}" id="scheme-${key}">
+                    <option value="" disabled selected>Select a scheme</option>
+                    <option value="Paillier|PSI-CA">Cardinality - Paillier</option>
+                    <option value="DamgardJurik|PSI-CA">Cardinality - Damgard-Jurik</option>
+                    <option value="BFV|OPE">BFV</option>
+                    <option value="Diffie-Hellman|NIKE">NIKE - DH</option>
+                    <option value="Kyber|NIKE">NIKE - Kyber</option>
+                    <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
+                    <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
+                    <option value="NTRU|NIKE">NIKE - NTRU</option>
+                    <option value="BIKE|NIKE">NIKE - BIKE</option>
+                    <option value="HQC|NIKE">NIKE - HQC</option>
+                    <option value="X25519|NIKE">NIKE - X25519</option>
+                    <option value="P256|NIKE">NIKE - P256</option>
+                    <option value="HybridSaberX25519|NIKE">NIKE - HybridSaberX25519</option>
+                  </select>
+                  <button class="btn-small btn-dark scheme-btn" data-device="${key}">Start</button>
+                </div>
+              </div>
             </div>
-        </div>`);
-}
+          </div>`;
+      });
 
-function update_devices() {
-    $.getJSON('/api/devices', function(data){
-        const $devices = $('#devices');
-        $devices.empty();
-
-        if (data.status === nodeNotConnected) {
-            $('#devicesConnected').html('<h2>El nodo está apagado</h2>');
-            return;
-        }
-
-        $('#devicesConnected').html('<h2>Dispositivos registrados</h2>');
-
-        let cardsHTML = '<div class="row">';
-
-        $.each(data, function(key, value){
-            let displayKey = key.replace(/:.*:/, '::');
-            let deviceType = value.device_type || "Desconocido";
-
-            let card = `
-                <div class="col s12 m6 l4">
-                    <div class="card z-depth-2 ${deviceType.toLowerCase()}-device" id="card-${key}">
-                        <div class="card-content">
-                            <span class="card-title">${displayKey}</span>
-                            <p><strong>Tipo:</strong> ${deviceType}</p>
-                            <p>Última conexión: ${value.last_seen}</p>
-                            <div class="result-message" id="result-${key}" style="margin-top: 10px;"></div>
-                        </div>
-                        <div class="card-action">
-                            <div class="btn-group" style="margin-bottom: 10px;">
-                                <a class="btn-small green ping-btn" data-device="${key}">Ping</a>
-                                <a class="btn-small orange" onclick="testCategory('${key}', 'psi')">Test PSI</a>
-                                <a class="btn-small blue" onclick="testCategory('${key}', 'ope')">Test OPE</a>
-                                <a class="btn-small red" onclick="testCategory('${key}', 'nike')">Test NIKE</a>
-                                <a class="btn-small light-blue" onclick="testCategory('${key}', 'all')">Test All</a>
-                            </div>
-                            <div class="input-field">
-                                <select class="scheme-selector" data-device="${key}" id="scheme-${key}">
-                                    <option value="" disabled selected>Elige un esquema</option>
-                                    <option value="Paillier|PSI-CA">Cardinality - Paillier</option>
-                                    <option value="DamgardJurik|PSI-CA">Cardinality - Damgard-Jurik</option>
-                                    <option value="BFV|OPE">BFV</option>
-                                    <option value="Diffie-Hellman|NIKE">NIKE - DH</option>
-                                    <option value="Kyber|NIKE">NIKE - Kyber</option>
-                                    <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
-                                    <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
-                                    <option value="NTRU|NIKE">NIKE - NTRU</option>
-                                    <option value="BIKE|NIKE">NIKE - BIKE</option>
-                                    <option value="HQC|NIKE">NIKE - HQC</option>
-                                    <option value="X25519|NIKE">NIKE - X25519</option>
-                                    <option value="P256|NIKE">NIKE - P256</option>
-                                    <option value="HybridSaberX25519|NIKE">NIKE - HybridSaberX25519</option>
-                                </select>
-                                <button class="btn-small btn-dark scheme-btn" data-device="${key}">Iniciar</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-            cardsHTML += card;
-        });
-
-        cardsHTML += '</div>';
-        $devices.html(cardsHTML);
-        $('select').formSelect();
-    });
-}
-
-$(document).on('click', '.ping-btn', function() {
-    const device = $(this).data('device');
-    ping(device);
-});
-
-function ping(device) {
-    loader();
-    $.post('/api/ping/' + device, function(data){
-    }).done(function(data){
-        const message = data.status;
-        showToast(message);
-        showResult(device, message);
-        update_devices();
-    });
-}
-
-function test(device) {
-    $.post(`/api/test?device=${device}`, function(data){})
-    .done(function(data) {
-        const message = data.status;
-        showToast(message);
-        showResult(device, message);
+      cardsHTML += '</div>';
+      $devices.html(cardsHTML);
+      $('select').formSelect();
     })
-    .fail(function() {
-        const error = "Error returned, likely the node threw an exception. Check the logs.";
-        showToast(error);
-        showResult(device, error);
-    });
+    .fail(() => showToast("Failed to load devices"));
+}
+
+function discover_peers() {
+  $.post('/api/discover_peers')
+    .done(res => {
+      showToast(res.status || "Peer discovery started");
+      setTimeout(updateDevices, 2000);
+    })
+    .fail(() => {
+      showToast("Failed to start peer discovery");
+    })
+}
+
+function pingDevice(device) {
+    $.post(`/api/ping/${device}`)
+        .done(data => {
+            showToast(data.status);
+            showResult(device, data.status);
+        })
+        .fail(() => showToast("Ping failed"))
+        .always(() => {
+            updateDevices();
+        });
 }
 
 function testCategory(device, category) {
-    let endpoint = '/api/test_' + category.toLowerCase();
-
-    $.post(`${endpoint}?device=${device}`, function(data){})
-    .done(function(data) {
-        const message = data.status;
-        showToast(message);
-        showResult(device, message);
-    })
-    .fail(function() {
-        const error = "Test failed. Check the logs.";
-        showToast(error);
-        showResult(device, error);
-    });
+    const endpoint = `/api/test_${category.toLowerCase()}`;
+    $.post(`${endpoint}?device=${device}`)
+        .done(data => {
+            showToast(data.status);
+            showResult(device, data.status);
+        })
+        .fail(() => {
+            const error = "Test failed. Check the logs.";
+            showToast(error);
+            showResult(device, error);
+        });
 }
-
-function formatTestResults(data) {
-    if (!data.results) return data.status;
-
-    let html = `<strong>${data.status}</strong><ul>`;
-    for (const [scheme, result] of Object.entries(data.results)) {
-        html += `<li><strong>${scheme}</strong>: ${result}</li>`;
-    }
-    html += `</ul>`;
-    return html;
-}
-
-function connect() {
-    $.post('/api/connect', function(data){
-        const message = data.status;
-        showToast(message);
-        update_devices();
-        get_port();
-        get_id();
-        $('#connect').prop('disabled', true);
-        $('#disconnect').prop('disabled', false);
-    });
-}
-
-function disconnect() {
-    $.post('/api/disconnect', function(data){
-        const message = data.status;
-        showToast(message);
-        update_devices();
-        get_port();
-        get_id();
-        $('#connect').prop('disabled', false);
-        $('#disconnect').prop('disabled', true);
-    });
-}
-
-function findIntersection(device, scheme, type, rounds = 1) {
-    const data = {
-        "device": device,
-        "scheme": scheme,
-        "type": type,
-        "rounds": rounds
-    };
-    $.ajax({
-        url: '/api/intersection',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        dataType: 'json',
-        success: function(response) {
-            const message = response.status;
-            const successMsg = `<div>
-                <strong>Ejecución finalizada:</strong><br>
-                <strong>Dispositivo:</strong> ${device}<br>
-                <strong>Esquema:</strong> ${scheme}<br>
-                <strong>Tipo:</strong> ${type}<br>
-                <strong>Rondas:</strong> ${rounds}<br>
-                <strong>Estado:</strong> ${message}
-            </div>`;
-            showToast(`${scheme} ejecutado en ${device}`);
-            showResult(device, successMsg);
-        },
-        error: function(xhr, status, error) {
-            const errorMsg = `<div>
-                <strong>Error durante la ejecución</strong><br>
-                <strong>Dispositivo:</strong> ${device}<br>
-                <strong>Esquema:</strong> ${scheme}<br>
-                <strong>Tipo:</strong> ${type}<br>
-                <strong>Rondas:</strong> ${rounds}<br>
-                <strong>Detalles:</strong> ${error || "Error desconocido"}
-            </div>`;
-            showToast(`Error al ejecutar ${scheme} en ${device}`);
-            showResult(device, errorMsg);
-        }
-    });
-}
-
-$(document).on('click', '.scheme-btn', function() {
-    const device = $(this).data('device');
-    const value = $(`#scheme-${device}`).val();
-    runScheme(device, value);
-});
 
 function runScheme(device, value) {
     if (!value || !value.includes('|')) {
-        showToast("Esquema no válido. Selecciona uno para continuar.");
-        showResult(device, `<strong>Error:</strong> No se seleccionó un esquema válido.`);
+        showToast("Invalid scheme. Please select one to continue.");
+        showResult(device, `<strong>Error:</strong> No valid scheme selected.`);
         return;
     }
 
     const [scheme, type] = value.split('|').map(s => s.trim());
 
     const startMsg = `<div>
-        <strong>Iniciando algoritmo:</strong><br>
-        <strong>Dispositivo:</strong> ${device}<br>
-        <strong>Esquema:</strong> ${scheme}<br>
-        <strong>Tipo:</strong> ${type}<br>
-        <em>Esperando respuesta...</em>
+        <strong>Starting algorithm:</strong><br>
+        <strong>Device:</strong> ${device}<br>
+        <strong>Scheme:</strong> ${scheme}<br>
+        <strong>Type:</strong> ${type}<br>
+        <em>Waiting for response...</em>
     </div>`;
     showResult(device, startMsg);
-    showToast(`Iniciando algoritmo para ${scheme} (${device})`);
+    showToast(`Starting algorithm for ${scheme} (${device})`);
 
     findIntersection(device, scheme, type, 1);
+}
+
+function findIntersection(device, scheme, type, rounds = 1) {
+    $.ajax({
+        url: '/api/intersection',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ device, scheme, type, rounds }),
+        dataType: 'json'
+    })
+        .done(response => {
+            const message = response.status;
+            const successMsg = `<div>
+                <strong>Execution finished:</strong><br>
+                <strong>Device:</strong> ${device}<br>
+                <strong>Scheme:</strong> ${scheme}<br>
+                <strong>Type:</strong> ${type}<br>
+                <strong>Rounds:</strong> ${rounds}<br>
+                <strong>Status:</strong> ${message}
+            </div>`;
+            showToast(`${scheme} executed on ${device}`);
+            showResult(device, successMsg);
+        })
+        .fail((xhr, status, error) => {
+            const errorMsg = `<div>
+                <strong>Error during execution</strong><br>
+                <strong>Device:</strong> ${device}<br>
+                <strong>Scheme:</strong> ${scheme}<br>
+                <strong>Type:</strong> ${type}<br>
+                <strong>Rounds:</strong> ${rounds}<br>
+                <strong>Details:</strong> ${error || "Unknown error"}
+            </div>`;
+            showToast(`Failed to execute ${scheme} on ${device}`);
+            showResult(device, errorMsg);
+        });
+}
+
+function connect() {
+    $.post('/api/connect')
+        .done(data => {
+            showToast(data.status || "Successfully connected");
+            updateDevices();
+            getNodePort();
+            getNodeId();
+            $('#connect').prop('disabled', true);
+            $('#disconnect').prop('disabled', false);
+        })
+        .fail(() => showToast("Failed to connect to node"));
+}
+
+function disconnect() {
+    $.post('/api/disconnect')
+        .done(data => {
+            showToast(data.status || "Successfully disconnected");
+            updateDevices();
+            getNodePort();
+            getNodeId();
+            $('#connect').prop('disabled', false);
+            $('#disconnect').prop('disabled', true);
+        })
+        .fail(() => showToast("Failed to disconnect from node"));
+}
+
+function checkConnection() {
+    $.get('/api/check_connection')
+        .done(data => {
+            $('#connect').prop('disabled', data.status !== NODE_NOT_CONNECTED);
+            $('#disconnect').prop('disabled', data.status === NODE_NOT_CONNECTED);
+        })
+        .fail(() => showToast("Failed to check connection status"));
+}
+
+function refreshTasks() {
+    setInterval(() => {
+        $.get('/api/tasks')
+            .done(data => {
+                $('#pending_node').text(data.status[0]);
+                $('#pending_handler').text(data.status[1]);
+            })
+            .fail(() => console.warn("Failed to fetch task info"));
+    }, TASK_REFRESH_INTERVAL);
 }
 
 function showToast(message) {
     if (typeof M !== 'undefined' && M.toast) {
         M.toast({ html: message });
     } else {
-        alert(message);
+        console.log(message);
     }
 }
 
@@ -267,122 +264,77 @@ function showResult(device, message) {
     $(`#result-${device}`).html(`<div class="result-block">${message}</div>`);
 }
 
-function discover_peers() {
-    loader();
-    $.ajax({
-        type: 'POST',
-        url: '/api/discover_peers',
-        beforeSend: function() {
-            $('.preloader-wrapper').show();
-        },
-        success: function(data) {
-            const message = data.status;
-            showToast(message);
-            setTimeout(function() {
-                $('.preloader-wrapper').hide();
-                update_devices();
-            }, 2000);
-        }
-    });
-}
-
-function mykeys() {
-  $.get('/api/mykeys', function(data) {
-    let message = "<h3>Claves y claves compartidas</h3>";
-    for (const [scheme, keyObj] of Object.entries(data)) {
-      if (keyObj.public_key) {
-        message += `<h4>${scheme}</h4><pre>${keyObj.public_key}</pre>`;
-      } else if (keyObj.shared_key) {
-        message += `<h4>${scheme} (shared)</h4><pre>${keyObj.shared_key}</pre>`;
-      }
-    }
-
-    const win = window.open();
-    win.document.write('<html><body>' + message + '</body></html>');
-  });
-}
-
-function my_data() {
-  $.get('/api/dataset', function(data) {
-    const dataset = data.dataset;
-    const message = `<h3>Mi Dataset</h3><ul>${dataset.map(item => `<li>${item}</li>`).join('')}</ul>`;
-    const win = window.open();
-    win.document.write('<html><body>' + message + '</body></html>');
-  });
-}
-
 function results() {
-  $.get('/api/results', function(data) {
-    const result = data.result;
-    let grouped = {};
+  $.get('/api/results', function (data) {
+    if (!data || !data.result) {
+      showToast("No results available");
+      return;
+    }
 
-    for (const [key, value] of Object.entries(result)) {
+    const results = data.result;
+    let structured = {};
+
+    for (const [key, value] of Object.entries(results)) {
       const parts = key.split(" ");
-      const device = parts[0];
-      const rest = parts.slice(1).join(" ");
+      const device = parts[0] || "Unknown Device";
+      const scheme = parts[1] || "Unknown Scheme";
+      const type = parts.slice(2).join(" ") || "General";
 
-      if (!grouped[device]) grouped[device] = {};
-      grouped[device][rest] = value;
+      if (!structured[device]) structured[device] = {};
+      if (!structured[device][scheme]) structured[device][scheme] = {};
+      structured[device][scheme][type] = value;
     }
 
-    let message = "<h3>Resultados</h3>";
-    for (const [device, entries] of Object.entries(grouped)) {
-      message += `<h4>Dispositivo: ${device}</h4><ul>`;
-      for (const [desc, value] of Object.entries(entries)) {
-        let displayValue = value;
-        if (typeof value === "string" && value.length > 50) {
-          displayValue = value.slice(0, 50) + "...";
+    let html = `
+      <html>
+        <head>
+          <title>PSI Suite - Results</title>
+          <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet"/>
+          <style>
+            body { padding: 20px; font-family: Roboto, sans-serif; }
+            h3, h4, h5 { margin-top: 1rem; }
+            code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+            .scheme-card { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; }
+            .device-header { background: #2196f3; color: white; padding: 8px; border-radius: 6px; }
+          </style>
+        </head>
+        <body>
+          <h3>Computation Results</h3>
+          <p>Below are the results grouped by <strong>Device</strong>, <strong>Scheme</strong>, and <strong>Algorithm Type</strong>.</p>
+    `;
+
+    for (const [device, schemes] of Object.entries(structured)) {
+      html += `<div class="device-header"><h4>Device: ${device}</h4></div>`;
+
+      for (const [scheme, types] of Object.entries(schemes)) {
+        html += `<div class="scheme-card"><h5>Scheme: ${scheme}</h5><ul>`;
+
+        for (const [type, value] of Object.entries(types)) {
+          let displayValue = value;
+
+          if (typeof displayValue === "string" && displayValue.length > 200) {
+            displayValue = displayValue.slice(0, 200) + "...";
+          } else if (Array.isArray(displayValue)) {
+            displayValue = `[${displayValue.length} elements]`;
+          } else if (typeof displayValue === "object") {
+            displayValue = JSON.stringify(displayValue, null, 2);
+          }
+
+          html += `<li><strong>${type}</strong>: <code>${displayValue}</code></li>`;
         }
-        message += `<li><strong>${desc}</strong>: <code>${displayValue}</code></li>`;
+        html += `</ul></div>`;
       }
-      message += "</ul>";
     }
 
-    const win = window.open();
-    win.document.write('<html><body>' + message + '</body></html>');
-  });
-}
+    html += `
+        </body>
+      </html>
+    `;
 
-function genkeys(scheme, bitlength) {
-  $.post(`/api/genkeys?scheme=${scheme}&bit_length=${bitlength}`, function(data) {
-    const message = data.status;
-    showToast(`Generación de claves para ${scheme}: ${message}`);
+    const resultWindow = window.open("", "_blank");
+    resultWindow.document.write(html);
+    resultWindow.document.close();
   }).fail(() => {
-    showToast(`Error al generar claves para ${scheme}.`);
+    showToast("Failed to load results from the backend");
   });
-}
-
-function check_connection() {
-    $.get('/api/check_connection', function(data){
-        if (data.status === nodeNotConnected) {
-            $('#connect').prop('disabled', false);
-            $('#disconnect').prop('disabled', true);
-        } else {
-            $('#connect').prop('disabled', true);
-            $('#disconnect').prop('disabled', false);
-        }
-    });
-}
-
-function check_tasks() {
-    setInterval(function() {
-        $.get('/api/tasks', function(data) {
-            let nodeStatus = data.status[0];
-            let handlerStatus = data.status[1];
-            $('#pending_node').text(nodeStatus);
-            $('#pending_handler').text(handlerStatus);
-        });
-    }, 1000);
-}
-
-function toggleTheme() {
-    document.body.classList.toggle("dark-mode");
-    document.querySelector('.left-menu').classList.toggle("dark-mode");
-    document.querySelector('.content').classList.toggle("dark-mode");
-    document.querySelectorAll('.card').forEach(card => card.classList.toggle("dark-mode"));
-
-    const isDark = document.body.classList.contains("dark-mode");
-    const toggleBtn = document.querySelector('button[onclick="toggleTheme()"]');
-    toggleBtn.innerHTML = isDark ? "☀️ Modo Claro" : "🌙 Modo Oscuro";
-    localStorage.setItem("darkMode", isDark);
 }

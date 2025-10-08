@@ -26,6 +26,11 @@ class DiffieHellmanHelper(CSHelper):
 
     def compute_shared_key(self, peer_pubkey):
         peer_pubkey = int(peer_pubkey)
+        
+        # 1 < peer_pubkey < p−1
+        if not (2 <= peer_pubkey <= self.p -2):
+            raise ValueError("Invalid peer public key")
+        
         shared_secret = pow(peer_pubkey, self.private_key, self.p)
         print(f"[DH] Shared secret computed: {shared_secret}")
 
