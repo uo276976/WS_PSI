@@ -75,6 +75,7 @@ connect_firebase()
 def firebase_connected(func):
     def wrapper(*args, **kwargs):
         if default_app is None:
+            print("[FIREBASE] Not connected, skipping log.")
             return
         return func(*args, **kwargs)
 

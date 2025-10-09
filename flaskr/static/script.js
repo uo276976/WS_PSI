@@ -96,7 +96,7 @@ function updateDevices() {
                     <option value="HQC|NIKE">NIKE - HQC</option>
                     <option value="X25519|NIKE">NIKE - X25519</option>
                     <option value="P256|NIKE">NIKE - P256</option>
-                    <option value="HybridSaberX25519|NIKE">NIKE - HybridSaberX25519</option>
+                    <option value="HybridKyberX25519|NIKE">NIKE - HybridKyberX25519</option>
                   </select>
                   <button class="btn-small btn-dark scheme-btn" data-device="${key}">Start</button>
                 </div>
@@ -111,6 +111,12 @@ function updateDevices() {
     })
     .fail(() => showToast("Failed to load devices"));
 }
+
+$(document).on('click', '[data-category]', function () {
+  const device = $(this).data('device');
+  const category = $(this).data('category'); // 'psi' | 'ope' | 'nike' | 'all'
+  testCategory(device, category);
+});
 
 function discover_peers() {
   $.post('/api/discover_peers')
@@ -149,6 +155,32 @@ function testCategory(device, category) {
         });
 }
 
+function normalizeScheme(s) {
+  const map = {
+    'Paillier OPE': 'Paillier',
+    'Paillier_OPE': 'Paillier',
+    'Paillier PSI-CA OPE': 'Paillier',
+
+    'Damgard-Jurik': 'DamgardJurik',
+    'DamgardJurik OPE': 'DamgardJurik',
+    'Damgard-Jurik_OPE': 'DamgardJurik',
+    'Damgard-Jurik PSI-CA OPE': 'DamgardJurik',
+
+    'CA-OPE': 'CAOPE',
+    'CA_OPE': 'CAOPE',
+
+    'BFV_OPE': 'BFV',
+    'BFV OPE': 'BFV',
+
+    'DH': 'Diffie-Hellman',
+    'DiffieHellman': 'Diffie-Hellman',
+    'Curve25519': 'X25519',
+    'HybridKyber_X25519': 'HybridKyberX25519',
+    'Hybrid Kyber X25519': 'HybridKyberX25519'
+  };
+  return map[s] || s;
+}
+
 function runScheme(device, value) {
     if (!value || !value.includes('|')) {
         showToast("Invalid scheme. Please select one to continue.");
@@ -168,7 +200,8 @@ function runScheme(device, value) {
     showResult(device, startMsg);
     showToast(`Starting algorithm for ${scheme} (${device})`);
 
-    findIntersection(device, scheme, type, 1);
+    const schemeNorm = normalizeScheme(scheme);
+    findIntersection(device, schemeNorm, type, 1);
 }
 
 function findIntersection(device, scheme, type, rounds = 1) {

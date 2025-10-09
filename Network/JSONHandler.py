@@ -129,31 +129,28 @@ class JSONHandler:
 
         print(f"Key generation - {cs} - Time: {end_time - start_time:.4f}s")
 
-        Logs.log_activity(
-            thread_data,
-            activity_code="INTERSECTION_FINAL_STEP",
-            duration=end_time - start_time,
-            version=VERSION,
-            node_id=self.id,
-            scheme=cs_helper.imp_name,
-            category=crypto_impl.category,
-            device_type=device_type
-        )
-
     def start_intersection(self, device, scheme, type, rounds) -> str:
-        crypto_impl = CryptoImplementation.from_string(scheme)
+        normalized = scheme.replace("-", "").replace(" ", "")
+        crypto_impl = CryptoImplementation.from_string(normalized)
+
+        if crypto_impl is None:
+            return f"Invalid scheme: {scheme}"
+
         cs = self.CSHandlers.get(crypto_impl.name)
         if cs is None:
-            return "Invalid scheme: " + scheme
+            return f"Invalid scheme: {scheme}"
+
+        category_lower = crypto_impl.category.lower()
+        type_lower = type.lower()
 
         for _ in range(int(rounds)):
-            if crypto_impl.category == "OPE" and type == "OPE":
+            if category_lower == "ope" and type_lower == "ope":
                 self.executor.submit(0, self.OPEHandler.intersection_first_step, device, cs)
-            elif crypto_impl.category == "PSI-CA" and type == "PSI-CA":
+            elif category_lower == "psi-ca" and type_lower == "psi-ca":
                 self.executor.submit(0, self.CAOPEHandler.intersection_first_step, device, cs)
-            elif crypto_impl.category == "PSI-Domain" and type == "PSI-Domain":
+            elif category_lower == "psi-domain" and type_lower == "psi-domain":
                 self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
-            elif crypto_impl.category == "NIKE" and type == "NIKE":
+            elif category_lower == "nike" and type_lower == "nike":
                 handler = self.NIKEHandlers.get(crypto_impl.name)
                 if handler:
                     self.executor.submit(0, handler.intersection_first_step, device, cs)
@@ -183,7 +180,7 @@ class JSONHandler:
             detected_type = msg.get("device_type") or self.device_type or "Unknown"
             self.new_peer(peer, time.strftime("%H:%M:%S", time.localtime()), device_type=detected_type)
 
-        crypto_impl = CryptoImplementation.from_string(impl)
+        crypto_impl = CryptoImplementation.from_string(impl.replace("-", "").replace(" ", ""))
         if crypto_impl.category != "NIKE":
             print(f"[DEBUG] Skipping non-NIKE scheme: {crypto_impl.name}")
             return

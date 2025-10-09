@@ -104,11 +104,26 @@ def analyze_activities(ftba, fp):
         # Crear un DataFrame vacío para almacenar los datos
         df_activities = pd.DataFrame()
 
+        if "logs" in data:
+            node_logs = data["logs"]
+        elif "activities" in data:
+            # single node JSON (from fetch_all_logs)
+            node_logs = {"local_node": data}
+        else:
+            # Try to detect if data itself looks like activities
+            if isinstance(data, dict) and all(isinstance(v, dict) for v in data.values()):
+                # probably a direct node dump: treat it as activities
+                node_logs = {"local_node": {"activities": data}}
+                print(f"[WARN] Assuming direct activities structure for {ftba}")
+            else:
+                print(f"[ERROR] Unknown JSON format in {ftba}, skipping file.")
+                return  # skip instead of raising an exception
+
         # Iterar sobre cada identificador en los datos
-        for identificador in data['logs']:
-            if 'activities' in data['logs'][identificador]:
+        for identificador, node_data in node_logs.items():
+             if "activities" in node_data:
                 # Extraer las actividades para el identificador actual
-                activities = data['logs'][identificador]['activities']
+                activities = node_data["activities"]
 
                 # Convertir las actividades en un DataFrame
                 df = pd.json_normalize(activities.values())
@@ -117,7 +132,20 @@ def analyze_activities(ftba, fp):
                 df['id'] = identificador
 
                 # Convertir la columna de timestamp a datetime
-                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+                # --- Handle missing timestamp column ---
+                time_col = None
+                for candidate in ["timestamp", "time", "log_time", "created_at", "Timestamp"]:
+                    if candidate in df.columns:
+                        time_col = candidate
+                        break
+
+                if time_col is None:
+                    print(f"[WARN] No timestamp column found in {ftba} (id: {identificador}), skipping this node.")
+                    continue
+
+                # Convert to datetime safely
+                df['timestamp'] = pd.to_datetime(df[time_col], errors='coerce', utc=True)
+
                 # Coerce para que ponga NaT si no puede convertir
 
                 # Debug: Verificar datos antes de concatenar
@@ -135,6 +163,12 @@ def analyze_activities(ftba, fp):
                     print("No hay valores NaT en 'timestamp' después de concatenar.")
 
     # Calcula el tiempo total
+    # --- Skip files with no valid timestamps ---
+    if df_activities.empty or 'timestamp' not in df_activities.columns:
+        print(f"[WARN] No valid timestamp data found in {ftba}, skipping time-based analysis.")
+        return
+
+    # Calcula el tiempo total
     tiempo_total = df_activities['timestamp'].max() - df_activities['timestamp'].min()
     print(f'Tiempo total: {tiempo_total}')
 
@@ -142,7 +176,13 @@ def analyze_activities(ftba, fp):
     df_activities = df_activities.sort_values('timestamp')
 
     # Agrupa los datos por el código de actividad
-    grouped = df_activities.groupby('activity_code')
+    # --- Group by both scheme and device type ---
+    if 'scheme' in df_activities.columns:
+        group_key = ['scheme', 'device_type']
+    else:
+        group_key = ['activity_code', 'device_type']
+
+    grouped = df_activities.groupby(group_key)
 
     # Crea un DataFrame para almacenar los resultados
     results = pd.DataFrame(
@@ -152,101 +192,102 @@ def analyze_activities(ftba, fp):
 
     # Calcula las medias y los picos para cada grupo
     for name, group in grouped:
-    if group.empty:
-        continue
+        if group.empty:
+            continue
 
-    # --- Normalize and clean columns ---
-    # Device type is now explicitly logged
-    device_type = group.get('device_type', group.get('Details', 'Unknown'))
-    if isinstance(device_type, pd.Series):
-        device_type = device_type.iloc[0]
+        # --- Normalize and clean columns ---
+        # Device type is now explicitly logged
+        device_type = group.get('device_type', group.get('Details', 'Unknown'))
+        if isinstance(device_type, pd.Series):
+            device_type = device_type.iloc[0]
 
-    # Parse Ciphertext size if present
-    if 'Ciphertext_size' in group.columns:
-        group['Ciphertext_size'] = (
-            group['Ciphertext_size']
-            .astype(str)
-            .str.replace(' bytes', '', regex=False)
-            .astype(float)
-        )
-        media_cipher = group['Ciphertext_size'].mean()
-    else:
-        media_cipher = nan
+        # Parse Ciphertext size if present
+        if 'Ciphertext_size' in group.columns:
+            group['Ciphertext_size'] = (
+                group['Ciphertext_size']
+                .astype(str)
+                .str.replace(' bytes', '', regex=False)
+                .astype(float)
+            )
+            media_cipher = group['Ciphertext_size'].mean()
+        else:
+            media_cipher = nan
 
-    media_tiempo = group['time'].mean()
+        media_tiempo = group['time'].mean()
 
-    # Android-specific
-    if 'Android' in str(device_type):
-        # Strip units
-        for col in ['Avg_RAM', 'Peak_RAM', 'App_Avg_RAM', 'App_Peak_RAM']:
-            if col in group.columns:
-                group[col] = group[col].astype(str).str.replace(' MB', '', regex=False).astype(float)
+        # Android-specific
+        if 'Android' in str(device_type):
+            # Strip units
+            for col in ['Avg_RAM', 'Peak_RAM', 'App_Avg_RAM', 'App_Peak_RAM']:
+                if col in group.columns:
+                    group[col] = group[col].astype(str).str.replace(' MB', '', regex=False).astype(float)
 
-        # CPU time
-        if 'CPU_time' in group.columns:
-            group['CPU_time'] = group['CPU_time'].astype(str).str.replace(' ms', '', regex=False).astype(float)
+            # CPU time
+            if 'CPU_time' in group.columns:
+                group['CPU_time'] = group['CPU_time'].astype(str).str.replace(' ms', '', regex=False).astype(float)
 
-        media_ram = group['Avg_RAM'].mean()
-        min_ram = group['Avg_RAM'].min()
-        max_ram = group['Peak_RAM'].max()
-        instance_ram = group['App_Avg_RAM'].mean()
-        instance_min_ram = group['App_Avg_RAM'].min()
-        instance_max_ram = group['App_Peak_RAM'].max()
-        cpu_time = group['CPU_time'].mean() if 'CPU_time' in group.columns else nan
-        min_cpu_time = group['CPU_time'].min() if 'CPU_time' in group.columns else nan
-        max_cpu_time = group['CPU_time'].max() if 'CPU_time' in group.columns else nan
+            media_ram = group['Avg_RAM'].mean()
+            min_ram = group['Avg_RAM'].min()
+            max_ram = group['Peak_RAM'].max()
+            instance_ram = group['App_Avg_RAM'].mean()
+            instance_min_ram = group['App_Avg_RAM'].min()
+            instance_max_ram = group['App_Peak_RAM'].max()
+            cpu_time = group['CPU_time'].mean() if 'CPU_time' in group.columns else nan
+            min_cpu_time = group['CPU_time'].min() if 'CPU_time' in group.columns else nan
+            max_cpu_time = group['CPU_time'].max() if 'CPU_time' in group.columns else nan
 
-        results.loc[len(results)] = [
-            device_type, name, media_tiempo, media_ram, min_ram, max_ram,
-            None, None, None,
-            instance_ram, None, instance_min_ram, instance_max_ram, None, None,
-            cpu_time, min_cpu_time, max_cpu_time, media_cipher
-        ]
+            results.loc[len(results)] = [
+                device_type, name, media_tiempo, media_ram, min_ram, max_ram,
+                None, None, None,
+                instance_ram, None, instance_min_ram, instance_max_ram, None, None,
+                cpu_time, min_cpu_time, max_cpu_time, media_cipher
+            ]
 
-    # WS / Python-specific
-    else:
-        # Clean CPU columns
-        for col in ['Avg_CPU', 'Peak_CPU', 'Avg_instance_CPU', 'Peak_instance_CPU']:
-            if col in group.columns:
-                group[col] = (
-                    group[col]
-                    .astype(str)
-                    .str.replace('%', '', regex=False)
-                    .replace('N/A', nan)
-                    .astype(float)
-                )
+        # WS / Python-specific
+        else:
+            # Clean CPU columns
+            for col in ['Avg_CPU', 'Peak_CPU', 'Avg_instance_CPU', 'Peak_instance_CPU']:
+                if col in group.columns:
+                    # Extract only the first numeric value (ignore GHz, cores, etc.)
+                    group[col] = (
+                        group[col]
+                        .astype(str)
+                        .str.extract(r'([\d.]+)')   # get only the first number
+                        .replace('N/A', nan)
+                        .astype(float)
+                    )
 
-        # Clean RAM columns
-        for col in ['Avg_RAM', 'Peak_RAM', 'Avg_instance_RAM', 'Peak_instance_RAM']:
-            if col in group.columns:
-                group[col] = (
-                    group[col]
-                    .astype(str)
-                    .str.replace(' MB', '', regex=False)
-                    .replace('N/A', nan)
-                    .astype(float)
-                )
+            # Clean RAM columns
+            for col in ['Avg_RAM', 'Peak_RAM', 'Avg_instance_RAM', 'Peak_instance_RAM']:
+                if col in group.columns:
+                    group[col] = (
+                        group[col]
+                        .astype(str)
+                        .str.extract(r'([\d.]+)')  # extract first number
+                        .replace('N/A', nan)
+                        .astype(float)
+                    )
 
-        media_ram = group['Avg_RAM'].mean()
-        min_ram = group['Avg_RAM'].min()
-        max_ram = group['Peak_RAM'].max()
-        instance_ram = group['Avg_instance_RAM'].mean()
-        instance_min_ram = group['Avg_instance_RAM'].min()
-        instance_max_ram = group['Peak_instance_RAM'].max()
-        instance_cpu = group['Avg_instance_CPU'].mean()
-        instance_min_cpu = group['Avg_instance_CPU'].min()
-        instance_max_cpu = group['Peak_instance_CPU'].max()
-        media_cpu = group['Avg_CPU'].mean()
-        min_cpu = group['Avg_CPU'].min()
-        max_cpu = group['Peak_CPU'].max()
+            media_ram = group['Avg_RAM'].mean()
+            min_ram = group['Avg_RAM'].min()
+            max_ram = group['Peak_RAM'].max()
+            instance_ram = group['Avg_instance_RAM'].mean()
+            instance_min_ram = group['Avg_instance_RAM'].min()
+            instance_max_ram = group['Peak_instance_RAM'].max()
+            instance_cpu = group['Avg_instance_CPU'].mean()
+            instance_min_cpu = group['Avg_instance_CPU'].min()
+            instance_max_cpu = group['Peak_instance_CPU'].max()
+            media_cpu = group['Avg_CPU'].mean()
+            min_cpu = group['Avg_CPU'].min()
+            max_cpu = group['Peak_CPU'].max()
 
-        results.loc[len(results)] = [
-            device_type, name, media_tiempo, media_ram, min_ram, max_ram,
-            media_cpu, min_cpu, max_cpu,
-            instance_ram, instance_cpu, instance_min_ram, instance_max_ram,
-            instance_min_cpu, instance_max_cpu,
-            None, None, None, media_cipher
-        ]
+            results.loc[len(results)] = [
+                device_type, name, media_tiempo, media_ram, min_ram, max_ram,
+                media_cpu, min_cpu, max_cpu,
+                instance_ram, instance_cpu, instance_min_ram, instance_max_ram,
+                instance_min_cpu, instance_max_cpu,
+                None, None, None, media_cipher
+            ]
 
 
     # Para guardar los gráficos y los resultados
@@ -267,43 +308,61 @@ def analyze_activities(ftba, fp):
     for i, column in enumerate(results.columns):
         if column not in results.columns or results[column].dropna().empty:
             continue
-        
-        if column != 'activity_code' and column != 'device_type':
-            # Filtrar NaN antes de nada, para poder seguir teniendo gráficas de los que tengamos datos
-            filtered_results = results.dropna(subset=[column]).copy()
-            # Aplicar el get_label para que los gráficos tengan un título más descriptivo
-            filtered_results['activity_name'] = filtered_results['activity_code'].apply(get_label)
 
-            if not filtered_results.empty:  # Verificar que haya datos después de filtrar NaN
-                # Crear el gráfico
-                plt.figure(figsize=(15, 5))  # Ajustar tamaño del gráfico
-                # Crear una lista de colores basada en los códigos de actividad
-                colors = [cmap(i) for i in np.linspace(0, 1, len(filtered_results['activity_code'].unique()))]
-                plt.barh(filtered_results['activity_name'], filtered_results[column], color=colors)
+        if column not in ['activity_code', 'device_type']:
+            filtered_results = results.dropna(subset=[column]).copy()
+            if filtered_results.empty:
+                continue
+
+            # --- Extract normalized scheme names ---
+            filtered_results['scheme_name'] = filtered_results['activity_code'].apply(
+                lambda x: get_cs_label(str(x[0]) if isinstance(x, tuple) else str(x))
+            )
+
+            # --- Ensure consistent device names ---
+            filtered_results['device_type'] = filtered_results['device_type'].astype(str).fillna('Unknown')
+
+            # --- Iterate over each device type separately ---
+            for device_type, df_device in filtered_results.groupby('device_type'):
+                if df_device.empty:
+                    continue
+
+                # Sort by scheme for clean visuals
+                df_device = df_device.sort_values('scheme_name')
+
+                # Create label and color scheme
+                plt.figure(figsize=(14, max(6, len(df_device) * 0.5)))
+                cmap = plt.get_cmap('tab20')
+                colors = [cmap(i) for i in np.linspace(0, 1, len(df_device))]
+
+                # Plot one bar per algorithm (only for this device)
+                plt.barh(df_device['scheme_name'], df_device[column], color=colors)
+
+                # --- Axis labeling ---
                 xlabel = ''
                 if column == 'media_tiempo':
                     xlabel = 'Tiempo medio - Segundos'
-                elif column.__contains__('ram'):
+                elif 'ram' in column:
                     xlabel = 'Consumo de RAM - MB'
-                elif column.__contains__('cpu'):
+                elif 'cpu' in column:
                     xlabel = 'Uso de CPU - %'
                 elif column == 'Ciphertext_size':
                     xlabel = 'Tamaño de cifrado - bytes'
-                if column == 'cpu_time' or column == 'min_cpu_time' or column == 'max_cpu_time':
+                if column in ['cpu_time', 'min_cpu_time', 'max_cpu_time']:
                     xlabel = 'Tiempo medio de CPU - ms'
-                plt.xlabel(xlabel)
-                plt.ylabel('Actividad')
-                # Concatenar en el título ambos tipos de dispositivos, cada uno representa una barra distinta
-                device_types = filtered_results['device_type'].unique()  # Get unique device types
-                plt.title(column.replace('_', ' ').upper() + ' - Dispositivos: ' + ' - '.join(device_types))
 
-                # Mostrar los resultados al lado de la barra
-                for i, value in enumerate(filtered_results[column]):
-                    plt.text(value, i, str(round(value, 3)))
+                plt.xlabel(xlabel)
+                plt.ylabel('Algoritmo')
+                plt.title(f"{column.replace('_', ' ').upper()} - {device_type}")
+
+                # Annotate values without overlap
+                for j, (value, label) in enumerate(zip(df_device[column], df_device['scheme_name'])):
+                    plt.text(value * 1.01, j, str(round(value, 3)), va='center', fontsize=9)
 
                 plt.tight_layout()
-                # Guardar el gráfico
-                plt.savefig(os.path.join(folder_path, column.replace('_', '') + '_plot.png'))
+                plt.subplots_adjust(right=0.9)
+                output_file = f"{column.replace('_', '')}_{device_type}_plot.png"
+                plt.savefig(os.path.join(folder_path, output_file), bbox_inches='tight')
                 plt.close()
 
     # Crear una figura y ejes para el gráfico
@@ -345,7 +404,11 @@ def analyze_activities(ftba, fp):
         app_cpu_time_values = app_cpu_time.apply(extract_numeric_value) if app_cpu_time is not None else None
 
         # Obtener la etiqueta de la leyenda
-        label = get_label(name)
+        if isinstance(name, tuple):
+            scheme_or_activity, device = name
+            label = f"{get_cs_label(str(scheme_or_activity))} ({device})"
+        else:
+            label = get_label(name)
 
         # Dibujar los gráficos como diagramas de puntos
         axs[0].scatter(tiempo_en_minutos, time_taken_values, label=label)

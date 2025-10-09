@@ -3,13 +3,13 @@ import json
 import datetime
 import firebase_admin
 from firebase_admin import credentials, db
-from analyzer import analyze_activities
+from Analyzer import analyze_activities
 
 def connect_firebase():
     if not firebase_admin._apps:
-        cred = credentials.Certificate('./FirebaseCredentials.json')
+        cred = credentials.Certificate('/home/alfonso/WS_PSI/FirebaseCredentials.json')
         firebase_admin.initialize_app(cred, {
-            'databaseURL': "https://<your-database>.firebaseio.com/"
+            'databaseURL': "https://ws-psi-default-rtdb.europe-west1.firebasedatabase.app/"
         })
 
 def fetch_all_logs():

@@ -37,13 +37,21 @@ def log_activity(specific_code):
 
             print(f"[DEBUG] Before calling Logs.log_activity for {activity_code}")
             try:
+                scheme_name = getattr(cs, "imp_name", "Unknown")
+                category = getattr(cs, "category", "Unknown")
+
+                log_step = func.__name__.upper()
                 Logs.log_activity(thread_data, activity_code, end_time - start_time,
-                                  VERSION, self.id, device, my_data_size,
-                                  ciphertext_size,
-                                  device_type = getattr(self, "device_type", None) \
-                                    or getattr(self, "node_device_type", None) \
-                                    or self.devices.get(device, {}).get("device_type") \
+                                VERSION, self.id, device, my_data_size,
+                                ciphertext_size,
+                                step=log_step,
+                                scheme=scheme_name,
+                                category=category,
+                                device_type=getattr(self, "device_type", None)
+                                    or getattr(self, "node_device_type", None)
+                                    or self.devices.get(device, {}).get("device_type")
                                     or "Unknown")
+
                 print(f"[DEBUG] After calling Logs.log_activity for {activity_code}")
             except Exception as e:
                 print(f"[ERROR] Logs.log_activity failed for {activity_code}: {e}")

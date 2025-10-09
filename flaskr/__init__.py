@@ -144,16 +144,17 @@ def create_app(test_config=None):
     @app.route('/api/intersection', methods=['POST'])
     @node_wrapper
     def api_intersection(node):
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True) or {}
         device = data.get('device')
-        scheme = data.get('scheme')
-        type = data.get('type')
-        rounds = data.get('rounds')
-        if device is None or scheme is None or type is None:
-            return jsonify({'status': 'Invalid parameters'})
-        if rounds is None or not str(rounds).isdigit():
-            rounds = 1
-        return jsonify({'status': node.start_intersection(device, scheme, type, rounds)})
+        scheme = data.get('scheme')  # ex: 'Paillier', 'BFV', 'Kyber', ...
+        type_  = data.get('type')    # ex: 'PSI-CA', 'OPE', 'NIKE'
+        rounds = int(data.get('rounds', 1) or 1)
+
+        if not device or not scheme or not type_:
+            return jsonify({'status': 'Invalid parameters'}), 400
+
+        status = node.start_intersection(device, scheme, type_, rounds)
+        return jsonify({'status': status})
 
     @app.route('/api/dataset', methods=['GET'])
     @node_wrapper
@@ -262,8 +263,11 @@ def create_app(test_config=None):
     @app.route('/api/tasks', methods=['GET'])
     @node_wrapper
     def api_check_tasks(node):
+        node = Node.getinstance()
+        if not node:
+            return jsonify({'status': ['No node running', 'No node running']})
         return jsonify({'status': node.check_tasks()})
-    
+        
     @app.route('/api/summary', methods=['GET'])
     @node_wrapper
     def api_summary(node):
