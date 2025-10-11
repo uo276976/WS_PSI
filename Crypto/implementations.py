@@ -12,7 +12,7 @@ CryptoImplementation("DomainPSI", "PSI-Domain")
 CryptoImplementation("BFV", "OPE", "BFV_OPE", "BFV OPE")
 
 # NIKE schemes
-CryptoImplementation("Diffie-Hellman", "NIKE", "DH")
+CryptoImplementation("Diffie-Hellman", "NIKE", "DH", "DiffieHellman", "Diffie Hellman")
 CryptoImplementation("Kyber", "NIKE")
 CryptoImplementation("ClassicMcEliece", "NIKE")
 CryptoImplementation("FrodoKEM", "NIKE")

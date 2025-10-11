@@ -112,7 +112,16 @@ class Node:
                     break
 
     def _handle_received(self, sender, message):
-        message = message.decode('utf-8')
+        if isinstance(message, bytes):
+            message = message.decode('utf-8')
+        if isinstance(message, str):
+            try:
+                msg = json.loads(message)
+            except Exception:
+                msg = message
+        else:
+            msg = message
+            
         print(f"Node {self.id} (You) received: {message}")
         day_time = time.strftime("%H:%M:%S", time.localtime())
         self.handle_message(sender, message, day_time)

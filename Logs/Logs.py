@@ -102,7 +102,7 @@ class ThreadData:
 @firebase_connected
 def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
                  my_data_size=None, ciphertext_size=None, scheme=None, category=None,
-                 device_type=None):
+                 device_type=None, step=None):
 
     profile = DEVICE_PROFILES.get(device_type, DEVICE_PROFILES["Unknown"])
     max_cores = profile["max_cpu_cores"]
@@ -149,6 +149,8 @@ def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
         log["category"] = category
     if device_type:
         log["device_type"] = device_type
+    if step:
+        log["step"] = step
 
     ref = db.reference(f"/logs/{get_formatted_id(id)}/activities")
     ref.push(log)
@@ -179,7 +181,7 @@ def get_logs(id):
 
 
 def start_logging(thread_data):
-    # Collect one synchronous sample to avoid empty arrays
+    """Inicia los hilos de muestreo de CPU y RAM del sistema y del proceso actual."""
     thread_data.cpu_usage.append(psutil.cpu_percent(interval=0.1))
     thread_data.ram_usage.append(psutil.virtual_memory().used / (1024 ** 2))
 
@@ -188,19 +190,25 @@ def start_logging(thread_data):
     thread_data.instance_ram_usage.append(round(proc.memory_info().rss / (1024 ** 2), 2))
     thread_data.instance_cpu_usage.append(proc.cpu_percent(interval=0.1))
 
-    # Start background threads
     threads = [
-        threading.Thread(target=log_instance_ram_usage, args=(thread_data,)),
-        threading.Thread(target=log_instance_cpu_usage, args=(thread_data,)),
-        threading.Thread(target=log_cpu_usage, args=(thread_data,)),
-        threading.Thread(target=log_ram_usage, args=(thread_data,))
+        threading.Thread(target=log_instance_ram_usage, args=(thread_data,), daemon=True),
+        threading.Thread(target=log_instance_cpu_usage, args=(thread_data,), daemon=True),
+        threading.Thread(target=log_cpu_usage, args=(thread_data,), daemon=True),
+        threading.Thread(target=log_ram_usage, args=(thread_data,), daemon=True),
     ]
+
+    thread_data.threads = threads
+
     for t in threads:
         t.start()
 
 
 def stop_logging(thread_data):
     thread_data.stop_event.set()
+    for t in getattr(thread_data, "threads", []):
+        if t.is_alive():
+            t.join(timeout=0.5)
+            
     stop_logging_cpu_usage(thread_data)
     stop_logging_ram_usage(thread_data)
 

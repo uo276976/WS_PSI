@@ -22,9 +22,10 @@ function initializeDashboard() {
     });
 
     $(document).on('click', '.scheme-btn', function () {
-        const device = $(this).data('device');
-        const value = $(`#scheme-${device}`).val();
-        runScheme(device, value);
+      const $card = $(this).closest('.card');
+      const device = $(this).data('device');
+      const value = $card.find('select.scheme-selector').val();
+      runScheme(device, value);
     });
 }
 
@@ -87,7 +88,7 @@ function updateDevices() {
                     <option value="Paillier|PSI-CA">Cardinality - Paillier</option>
                     <option value="DamgardJurik|PSI-CA">Cardinality - Damgard-Jurik</option>
                     <option value="BFV|OPE">BFV</option>
-                    <option value="Diffie-Hellman|NIKE">NIKE - DH</option>
+                    <option value="Diffie-Hellman|NIKE">NIKE - Diffie-Hellman</option>
                     <option value="Kyber|NIKE">NIKE - Kyber</option>
                     <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
                     <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
@@ -157,6 +158,7 @@ function testCategory(device, category) {
 
 function normalizeScheme(s) {
   const map = {
+    // PSI / OPE aliases
     'Paillier OPE': 'Paillier',
     'Paillier_OPE': 'Paillier',
     'Paillier PSI-CA OPE': 'Paillier',
@@ -166,19 +168,32 @@ function normalizeScheme(s) {
     'Damgard-Jurik_OPE': 'DamgardJurik',
     'Damgard-Jurik PSI-CA OPE': 'DamgardJurik',
 
+    'BFV_OPE': 'BFV',
+    'BFV OPE': 'BFV',
     'CA-OPE': 'CAOPE',
     'CA_OPE': 'CAOPE',
 
-    'BFV_OPE': 'BFV',
-    'BFV OPE': 'BFV',
-
+    // NIKE
     'DH': 'Diffie-Hellman',
     'DiffieHellman': 'Diffie-Hellman',
+    'Diffie Hellman': 'Diffie-Hellman',
     'Curve25519': 'X25519',
+    'X25519': 'X25519',
+    'P256': 'P256',
+    'Frodo': 'FrodoKEM',
+    'FrodoKEM': 'FrodoKEM',
+    'Kyber': 'Kyber',
+    'BIKE': 'BIKE',
+    'HQC': 'HQC',
+    'NTRU': 'NTRU',
+    'McEliece': 'ClassicMcEliece',
+    'Classic McEliece': 'ClassicMcEliece',
+    'ClassicMcEliece': 'ClassicMcEliece',
     'HybridKyber_X25519': 'HybridKyberX25519',
+    'HybridKyber-X25519': 'HybridKyberX25519',
     'Hybrid Kyber X25519': 'HybridKyberX25519'
   };
-  return map[s] || s;
+  return (map[s] || s).trim();
 }
 
 function runScheme(device, value) {
@@ -201,7 +216,7 @@ function runScheme(device, value) {
     showToast(`Starting algorithm for ${scheme} (${device})`);
 
     const schemeNorm = normalizeScheme(scheme);
-    findIntersection(device, schemeNorm, type, 1);
+    findIntersection(device, schemeNorm, type.toUpperCase(), 1);
 }
 
 function findIntersection(device, scheme, type, rounds = 1) {

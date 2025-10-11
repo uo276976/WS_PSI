@@ -177,18 +177,123 @@ def analyze_activities(ftba, fp):
 
     # Agrupa los datos por el código de actividad
     # --- Group by both scheme and device type ---
-    if 'scheme' in df_activities.columns:
-        group_key = ['scheme', 'device_type']
-    else:
-        group_key = ['activity_code', 'device_type']
+    # Normalize scheme column
+    if 'scheme' not in df_activities.columns:
+        df_activities['scheme'] = df_activities['activity_code']
+    df_activities['scheme'] = df_activities['scheme'].fillna('Unknown')
+    df_activities['scheme'] = df_activities['scheme'].apply(lambda x: get_cs_label(str(x)))
 
-    grouped = df_activities.groupby(group_key)
+    # Ensure device_type column exists
+    if 'device_type' not in df_activities.columns:
+        df_activities['device_type'] = 'Unknown'
+    df_activities['device_type'] = df_activities['device_type'].fillna('Unknown')
 
-    # Crea un DataFrame para almacenar los resultados
-    results = pd.DataFrame(
-        columns=['device_type', 'activity_code', 'media_tiempo', 'media_ram', 'min_ram', 'max_ram', 'media_cpu',
-                 'min_cpu', 'max_cpu', 'instance_ram', 'instance_cpu', 'instance_min_ram', 'instance_max_ram',
-                 'instance_min_cpu', 'instance_max_cpu', 'cpu_time', 'min_cpu_time', 'max_cpu_time', 'Ciphertext_size'])
+    # Extract numeric parts from text fields
+    def extract_num(x):
+        try:
+            if isinstance(x, str):
+                x = re.findall(r'[\d.]+', x)
+                if x:
+                    return float(x[0])
+            return float(x)
+        except Exception:
+            return np.nan
+
+    for col in ['time', 'Avg_RAM', 'Peak_RAM', 'Avg_instance_RAM', 'Peak_instance_RAM',
+                'Avg_CPU', 'Peak_CPU', 'Avg_instance_CPU', 'Peak_instance_CPU', 'Ciphertext_size']:
+        if col in df_activities.columns:
+            df_activities[col] = df_activities[col].apply(extract_num)
+
+    # Drop rows with invalid or zero times
+    df_activities = df_activities[df_activities['time'].notna() & (df_activities['time'] > 0)]
+
+    # Add per-row weight proportional to execution time
+    df_activities['weight'] = df_activities.groupby(['scheme', 'device_type'])['time'].transform(lambda x: x / x.sum())
+
+    # Weighted mean helper
+    def weighted_avg(series, weights):
+        try:
+            valid = series.notna()
+            if not valid.any():
+                return np.nan
+            return np.average(series[valid], weights=weights[valid])
+        except ZeroDivisionError:
+            return np.nan
+
+    # Aggregate across all steps per scheme/device
+    # --- Aggregate across all steps per scheme/device (weighted) ---
+    agg_rows = []
+    for (scheme, device_type), group in df_activities.groupby(['scheme', 'device_type']):
+        weights = group['weight']
+
+        entry = {
+            'scheme': scheme,
+            'device_type': device_type,
+            'media_tiempo': group['time'].sum(),  # total time = sum of all step durations
+            'media_ram': weighted_avg(group['Avg_RAM'], weights),
+            'min_ram': group['Avg_RAM'].min(),
+            'max_ram': group['Peak_RAM'].max(),
+            'media_cpu': weighted_avg(group['Avg_CPU'], weights),
+            'min_cpu': group['Avg_CPU'].min(),
+            'max_cpu': group['Peak_CPU'].max(),
+            'instance_ram': weighted_avg(group['Avg_instance_RAM'], weights),
+            'instance_cpu': weighted_avg(group['Avg_instance_CPU'], weights),
+            'instance_min_ram': group['Avg_instance_RAM'].min(),
+            'instance_max_ram': group['Peak_instance_RAM'].max(),
+            'instance_min_cpu': group['Avg_instance_CPU'].min(),
+            'instance_max_cpu': group['Peak_instance_CPU'].max(),
+            'Ciphertext_size': weighted_avg(group['Ciphertext_size'], weights)
+        }
+        agg_rows.append(entry)
+
+    results = pd.DataFrame(agg_rows)
+
+    # --- Save results to text ---
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    with open(os.path.join(folder_path, 'results.txt'), 'a') as f:
+        f.write(f'Tiempo total: {tiempo_total}\n')
+        for index, row in results.iterrows():
+            f.write(str(row) + '\n')
+
+    # --- Plot results ---
+    cmap = plt.get_cmap('tab20')
+    for column in [c for c in results.columns if c not in ['scheme', 'device_type']]:
+        filtered_results = results.dropna(subset=[column]).copy()
+        if filtered_results.empty:
+            continue
+
+        # Iterate per device type
+        for device_type, df_device in filtered_results.groupby('device_type'):
+            df_device = df_device.sort_values('scheme')
+
+            plt.figure(figsize=(14, max(6, len(df_device) * 0.5)))
+            colors = [cmap(i) for i in np.linspace(0, 1, len(df_device))]
+
+            plt.barh(df_device['scheme'], df_device[column], color=colors)
+
+            xlabel = ''
+            if column == 'media_tiempo':
+                xlabel = 'Tiempo total (s)'
+            elif 'ram' in column:
+                xlabel = 'Consumo de RAM (MB)'
+            elif 'cpu' in column:
+                xlabel = 'Uso de CPU (%)'
+            elif column == 'Ciphertext_size':
+                xlabel = 'Tamaño de cifrado (bytes)'
+
+            plt.xlabel(xlabel)
+            plt.ylabel('Algoritmo')
+            plt.title(f"{column.replace('_', ' ').upper()} - {device_type}")
+
+            # Annotate values neatly
+            for j, value in enumerate(df_device[column]):
+                plt.text(value * 1.01, j, f"{value:.2f}", va='center', fontsize=9)
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(folder_path, f"{column}_{device_type}.png"), bbox_inches='tight')
+            plt.close()
 
     # Calcula las medias y los picos para cada grupo
     for name, group in grouped:

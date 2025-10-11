@@ -116,6 +116,8 @@ class JSONHandler:
 
         cs_helper = self.CSHandlers.get(crypto_impl.name)
         if cs_helper is None:
+            setattr(cs_helper, "category", crypto_impl.category)
+            setattr(cs_helper, "imp_name", crypto_impl.name)
             Logs.stop_logging(thread_data)
             return
 
@@ -130,13 +132,41 @@ class JSONHandler:
         print(f"Key generation - {cs} - Time: {end_time - start_time:.4f}s")
 
     def start_intersection(self, device, scheme, type, rounds) -> str:
-        normalized = scheme.replace("-", "").replace(" ", "")
-        crypto_impl = CryptoImplementation.from_string(normalized)
+        scheme_map = {
+            "DiffieHellman": "Diffie-Hellman",
+            "DH": "Diffie-Hellman",
+            "HybridKyber_X25519": "HybridKyberX25519",
+            "HybridKyber-X25519": "HybridKyberX25519",
+            "Hybrid Kyber X25519": "HybridKyberX25519",
+            "Paillier_OPE": "Paillier",
+            "DamgardJurik_OPE": "DamgardJurik",
+            "Classic McEliece": "ClassicMcEliece",
+            "McEliece": "ClassicMcEliece",
+            "Frodo": "FrodoKEM",
+        }
 
+        scheme_canon = scheme_map.get(scheme, scheme)
+
+        compact = scheme_canon.replace(" ", "").replace("-", "").replace("_", "")
+
+        crypto_impl = CryptoImplementation.from_string(compact)
         if crypto_impl is None:
             return f"Invalid scheme: {scheme}"
 
-        cs = self.CSHandlers.get(crypto_impl.name)
+        candidate_keys = [
+            crypto_impl.name,
+            scheme_canon,
+            crypto_impl.name.replace("-", "").replace(" ", ""),
+            crypto_impl.name.replace("_", ""),
+            crypto_impl.name.replace(" ", "-"),
+        ]
+
+        cs = None
+        for k in candidate_keys:
+            if k in self.CSHandlers:
+                cs = self.CSHandlers[k]
+                break
+
         if cs is None:
             return f"Invalid scheme: {scheme}"
 
@@ -151,7 +181,11 @@ class JSONHandler:
             elif category_lower == "psi-domain" and type_lower == "psi-domain":
                 self.executor.submit(0, self.domainPSIHandler.intersection_first_step, device, cs)
             elif category_lower == "nike" and type_lower == "nike":
-                handler = self.NIKEHandlers.get(crypto_impl.name)
+                handler = self.NIKEHandlers.get(crypto_impl.name) \
+                    or self.NIKEHandlers.get(scheme_canon) \
+                    or self.NIKEHandlers.get(crypto_impl.name.replace("-", "")) \
+                    or self.NIKEHandlers.get(crypto_impl.name.replace(" ", ""))
+
                 if handler:
                     self.executor.submit(0, handler.intersection_first_step, device, cs)
                 else:

@@ -1,4 +1,5 @@
 import unittest
+import json
 from Crypto.handlers.PQCKEMHandlers import KEMHandler
 from Crypto.handlers.DHHandler import DHHandler
 from Crypto.handlers.KyberHandler import KyberHandler

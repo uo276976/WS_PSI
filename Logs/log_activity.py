@@ -38,7 +38,12 @@ def log_activity(specific_code):
             print(f"[DEBUG] Before calling Logs.log_activity for {activity_code}")
             try:
                 scheme_name = getattr(cs, "imp_name", "Unknown")
-                category = getattr(cs, "category", "Unknown")
+                try:
+                    from Crypto.helpers.CryptoImplementation import CryptoImplementation
+                    crypto_impl = CryptoImplementation.from_string(scheme_name)
+                    category = getattr(crypto_impl, "category", "Unknown")
+                except Exception:
+                    category = "Unknown"
 
                 log_step = func.__name__.upper()
                 Logs.log_activity(thread_data, activity_code, end_time - start_time,
