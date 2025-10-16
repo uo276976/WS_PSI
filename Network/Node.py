@@ -9,6 +9,7 @@ from Network.JSONHandler import JSONHandler
 from Network.PriorityExecutor import PriorityExecutor
 from Network.collections.DbConstants import DEFL_DOMAIN, DEFL_SET_SIZE
 from Crypto.helpers.CryptoImplementation import CryptoImplementation
+from Logs.Logs import get_container_limits
 
 class Node:
     __instance = None
@@ -42,11 +43,13 @@ class Node:
 
             self.device_type = os.getenv("DEVICE_TYPE", "Unknown")
             
-            self.executor = PriorityExecutor(max_workers=10)
+            container_limits = get_container_limits()
+            max_cpu_cores = max(1, int(container_limits["cpu_cores"]))
+            max_workers = max(1, int(max_cpu_cores * 2))
+            self.executor = PriorityExecutor(max_workers=max_workers)
             
             self.json_handler = JSONHandler(self.id, self.myData, self.domain, self.devices, self.results,
                                             self.new_peer, device_type=self.device_type)
-            self.device_type = os.getenv("DEVICE_TYPE", "Unknown")
             # Manejador de esquemas criptográficos
 
     def start(self):

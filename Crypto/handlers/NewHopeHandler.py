@@ -5,8 +5,8 @@ from Logs.LogContext import with_log_context
 
 
 class NewHopeHandler(IntersectionHandler):
-    def __init__(self, id, my_data, domain, devices, results, scheme_name="NewHope"):
-        super().__init__(id, my_data, domain, devices, results)
+    def __init__(self, id, my_data, domain, devices, results, scheme_name="NewHope", device_type="Unknown"):
+        super().__init__(id, my_data, domain, devices, results, device_type)
         self.scheme_name = scheme_name
 
     def intersection_first_step(self, device, cs):

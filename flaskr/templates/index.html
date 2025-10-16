@@ -2,55 +2,70 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PSI Suite</title>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js" defer></script>
 
-  <!-- Materialize & Icons -->
+  <!-- Fonts & Styles -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet"/>
 
-  <!-- Styles & scripts -->
-  <link href="../static/style.css" rel="stylesheet"/>
+  <!-- Local Styles & Scripts -->
+  <link href="../static/style.css" rel="stylesheet" />
   <script src="../static/script.js" defer></script>
 </head>
 <body>
+  <header>
+    <h1 class="visually-hidden">PSI Suite Dashboard</h1>
+  </header>
+
   <div class="row no-gutters">
     <!-- SIDEBAR -->
-    <nav class="col s12 m3 l2 grey lighten-4 left-menu hide-on-small-only">
+    <aside class="col s12 m3 l2 grey lighten-4 left-menu hide-on-small-only" aria-label="Panel lateral de control">
       <div class="nav-wrapper">
-        <h5 class="center-align">PSI Suite</h5>
-        <ul class="section">
-          <li><span class="details">ID: <strong id="id"></strong></span></li>
-          <li><span class="details">Puerto: <strong id="port"></strong></span></li>
-          <li><span id="pending_node"></span></li>
-          <li><span id="pending_handler"></span></li>
-        </ul>
-        <div class="section">
-          <a class="btn-small waves-effect waves-light" href="/metrics">Métricas</a>
-          <a class="btn-small waves-effect waves-light" onclick="results()">Datos</a>
-          <a class="btn-small waves-effect waves-light" onclick="my_data()">Mi dataset</a>
-          <a class="btn-small waves-effect waves-light" onclick="mykeys()">Mis claves</a>
-          <a class="btn-small waves-effect waves-light" onclick="genkeys('Paillier','2048')">Nuevas P</a>
-          <a class="btn-small waves-effect waves-light" onclick="genkeys('Damgard-Jurik','2048')">Nuevas DJ</a>
-          <a class="btn-small waves-effect waves-light" onclick="discover_peers()">Buscar peers</a>
-          <a id="connect"    class="btn-small waves-effect waves-light" onclick="connect()">Conectar</a>
-          <a id="disconnect" class="btn-small red waves-effect waves-light" onclick="disconnect()">Desconectar</a>
-        </div>
+        <h2 class="center-align" style="font-size:1.5rem;">PSI Suite</h2>
+        <hr class="divider" aria-hidden="true">
+
+        <section aria-labelledby="node-info">
+          <h3 id="node-info" class="visually-hidden">Información del nodo</h3>
+          <ul class="section" role="list">
+            <li><span class="details">ID: <strong id="id"></strong></span></li>
+            <li><span class="details">Puerto: <strong id="port"></strong></span></li>
+            <li><span id="pending_node" aria-live="polite"></span></li>
+            <li><span id="pending_handler" aria-live="polite"></span></li>
+          </ul>
+        </section>
+
+        <hr class="divider" aria-hidden="true">
+
+        <nav aria-label="Acciones del nodo">
+          <ul class="section" role="list">
+            <li><a class="btn-small waves-effect waves-light" href="/metrics">Métricas</a></li>
+            <li><a class="btn-small waves-effect waves-light" href="#" onclick="results()">Datos</a></li>
+            <li><a class="btn-small waves-effect waves-light" href="#" onclick="my_data()">Mi dataset</a></li>
+            <li><a class="btn-small waves-effect waves-light" href="#" onclick="mykeys()">Mis claves</a></li>
+            <li><a class="btn-small waves-effect waves-light" href="#" onclick="genkeys('Paillier','2048')">Nuevas P</a></li>
+            <li><a class="btn-small waves-effect waves-light" href="#" onclick="genkeys('Damgard-Jurik','2048')">Nuevas DJ</a></li>
+            <li><a class="btn-small waves-effect waves-light" href="#" onclick="discover_peers()">Buscar peers</a></li>
+            <li><a id="connect" class="btn-small waves-effect waves-light" href="#" onclick="connect()">Conectar</a></li>
+            <li><a id="disconnect" class="btn-small red waves-effect waves-light" href="#" onclick="disconnect()">Desconectar</a></li>
+          </ul>
+        </nav>
       </div>
-    </nav>
+    </aside>
 
     <!-- MAIN CONTENT -->
-    <main class="col s12 m9 l10 content">
-      <div class="container">
-        <h4 id="devicesConnected">Dispositivos conectados</h4>
-        <div id="devices" class="row"></div>
+    <main class="col s12 m9 l10 content" id="main-content">
+      <section class="container" aria-labelledby="devicesConnected">
+        <h2 id="devicesConnected">Dispositivos conectados</h2>
+        <div id="devices" class="row" role="region" aria-live="polite"></div>
         <p class="guide-text">
           Elige el criptosistema a usar para calcular la intersección:
         </p>
-      </div>
+      </section>
     </main>
   </div>
   

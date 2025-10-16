@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import logging
@@ -8,7 +9,7 @@ from queue import PriorityQueue, Full, Empty
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-# Prioritized task wrapper
+
 class PrioritizedItem:
     def __init__(self, priority, item):
         self.priority = priority
@@ -19,15 +20,24 @@ class PrioritizedItem:
 
 
 class PriorityExecutor:
-    def __init__(self, max_workers):
-        self.max_workers = max_workers
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+    def __init__(self, max_workers=None):
+        # --- Benchmark Mode Setup ---
+        benchmark_mode = os.getenv("BENCHMARK_MODE", "false").lower() == "true"
+        self.benchmark_mode = benchmark_mode
+
+        # Use 1 worker for benchmark mode, else default 10 (or provided value)
+        self.max_workers = 1 if benchmark_mode else (max_workers or 10)
+
+        self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
         self.queue = PriorityQueue()
-        self.max_tasks_in_queue = 1000
+        self.max_tasks_in_queue = 2000
         self.tasks_in_progress = 0
         self._lock = threading.Lock()
         self._shutdown_flag = False
         self._start_thread()
+
+        mode = "BENCHMARK" if benchmark_mode else "NORMAL"
+        logger.info(f"[PriorityExecutor] Initialized in {mode} mode with {self.max_workers} workers")
 
     def _start_thread(self):
         def run():
@@ -37,11 +47,13 @@ class PriorityExecutor:
                     func, args, kwargs = prioritized_item.item
                     with self._lock:
                         self.tasks_in_progress += 1
+
                     future = self.executor.submit(func, *args, **kwargs)
                     future.add_done_callback(lambda _: self.task_done())
                     self.queue.task_done()
+
                 except Empty:
-                    pass  # No task available in queue – normal behavior
+                    continue
                 except Exception as e:
                     logger.error(f"[PriorityExecutor] Error in run loop: {e}")
                     time.sleep(0.1)

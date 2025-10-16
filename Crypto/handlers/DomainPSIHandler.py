@@ -5,8 +5,8 @@ from Network.collections.DbConstants import VERSION
 from Logs.LogContext import with_log_context
 
 class DomainPSIHandler(IntersectionHandler):
-    def __init__(self, id, my_data, domain, devices, results):
-        super().__init__(id, my_data, domain, devices, results)
+    def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):
+        super().__init__(id, my_data, domain, devices, results, device_type)
 
     def intersection_first_step(self, device, cs):
         with with_log_context(self, cs, "FIRST_STEP", device):

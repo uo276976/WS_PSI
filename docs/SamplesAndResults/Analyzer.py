@@ -1,585 +1,280 @@
 import os
 import json
 import re
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import ticker
-from numpy import nan
+import seaborn as sns
 
+# ===========================================================
+# --- Utility functions ---
+# ===========================================================
 
 def get_cs_label(name: str) -> str:
-    """
-    Return a consistent, descriptive label for the cryptographic scheme given by 'name'.
-    Recognizes all schemes defined in CryptoImplementation, including new NIKE schemes.
-    """
+    """Normalize cryptographic scheme names (e.g., Diffie-Hellman, Kyber)."""
     if not name:
         return "Unknown"
 
     name_low = name.lower().replace("-", "").replace("_", "")
 
-    # PSI-CA schemes
     if "paillier" in name_low:
         return "Paillier"
-    elif "damgardjurik" in name_low or "damgård" in name_low:
+    elif "damgardjurik" in name_low:
         return "Damgård-Jurik"
     elif "caope" in name_low:
         return "CA-OPE"
-
-    # PSI-Domain scheme
     elif "domainpsi" in name_low:
         return "Domain PSI"
-
-    # OPE scheme
-    elif name_low == "bfv":
+    elif "bfv" == name_low:
         return "BFV"
 
     # NIKE schemes
-    elif "diffie-hellman" in name_low or "diffiehellman" in name_low:
+    if "diffiehellman" in name_low:
         return "Diffie-Hellman"
-
-    elif name_low == "x25519" or name_low == "curve25519":
-        return "X25519"
-
-    elif name_low == "p256" or name_low == "p-256":
+    if "p256" in name_low:
         return "P-256"
-
-    elif "kyber" in name_low:
+    if "hybrid" in name_low and "kyber" in name_low and "x25519" in name_low:
+        return "Hybrid Kyber-X25519"
+    if "kyber" in name_low:
         return "Kyber"
-
-    elif "classicmceliece" in name_low or "classic-mceliece" in name_low:
+    if "x25519" in name_low or "curve25519" in name_low:
+        return "X25519"
+    if "classicmceliece" in name_low:
         return "Classic McEliece"
-
-    elif "frodo" in name_low:
+    if "frodo" in name_low:
         return "FrodoKEM"
-
-    elif name_low == "ntru":
+    if "ntru" in name_low:
         return "NTRU"
-
-    elif "bike" in name_low:
+    if "bike" in name_low:
         return "BIKE"
-
-    elif "hqc" in name_low:
+    if "hqc" in name_low:
         return "HQC"
-
-    elif "hybrid" in name_low and "kyber" in name_low and "x25519" in name_low:
-        return "Hybrid Kyber/X25519"
-
-    # Fallback: use the original name if no mapping was found
     return name
 
 
-def get_label(name: str) -> str:
-    """
-    Return a plot label for a given activity 'name', combining scheme label and context.
-    Adds platform context (Android, WS, IoT) and uses get_cs_label for the scheme part.
-    """
-    if not name:  # Fallback if name is empty/None
-        return "Unknown"
-    base_name = name.strip()
-    platform_suffix = ""
-
-    # Normalize for platform types
-    if any(base_name.endswith(suffix) for suffix in [" Android", "-Android", "_Android"]):
-        base_name = re.sub(r'[-_ ]?Android$', '', base_name)
-        platform_suffix = " (Android)"
-    elif any(base_name.endswith(suffix) for suffix in [" WS", "-WS", "_WS"]):
-        base_name = re.sub(r'[-_ ]?WS$', '', base_name)
-        platform_suffix = " (WS)"
-    elif any(base_name.endswith(suffix) for suffix in [" IoT", "-IoT", "_IoT"]):
-        base_name = re.sub(r'[-_ ]?IoT$', '', base_name)
-        platform_suffix = " (IoT)"
-
-    scheme_label = get_cs_label(base_name)
-    return f"{scheme_label}{platform_suffix}"
+def extract_numeric(x):
+    """Extract first numeric value from a string (e.g., '22.5% - 2GHz' → 22.5)."""
+    try:
+        if isinstance(x, str):
+            match = re.findall(r'[\d.]+', x)
+            if match:
+                return float(match[0])
+        return float(x)
+    except Exception:
+        return np.nan
 
 
-def analyze_activities(ftba, fp):
-    output_folder = ftba.split('.')[0].upper()
-    folder_path = fp + output_folder
+def weighted_avg(series, weights):
+    """Compute weighted average, ignoring NaNs."""
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+    if not isinstance(weights, pd.Series):
+        weights = pd.Series(weights)
 
-    with open(fp + ftba, 'r') as f:  # r porque se va a leer
+    valid = series.notna() & weights.notna()
+    if not valid.any():
+        return np.nan
+
+    try:
+        return np.average(series[valid], weights=weights[valid])
+    except ZeroDivisionError:
+        return np.nan
+
+
+# ===========================================================
+# --- Main Analyzer ---
+# ===========================================================
+
+def analyze_activities(filename, folder_path):
+    """Aggregate, normalize, and visualize experiment data including slowdown and efficiency metrics."""
+    out_dir = os.path.join(folder_path, "AGGREGATED_ANALYSIS")
+    os.makedirs(out_dir, exist_ok=True)
+
+    print(f"\n[INFO] Analyzing {filename} ...")
+
+    # ---------------------------------------------------
+    # Load JSON data
+    # ---------------------------------------------------
+    with open(os.path.join(folder_path, filename), "r") as f:
         data = json.load(f)
-        # Crear un DataFrame vacío para almacenar los datos
-        df_activities = pd.DataFrame()
 
-        if "logs" in data:
-            node_logs = data["logs"]
-        elif "activities" in data:
-            # single node JSON (from fetch_all_logs)
-            node_logs = {"local_node": data}
-        else:
-            # Try to detect if data itself looks like activities
-            if isinstance(data, dict) and all(isinstance(v, dict) for v in data.values()):
-                # probably a direct node dump: treat it as activities
-                node_logs = {"local_node": {"activities": data}}
-                print(f"[WARN] Assuming direct activities structure for {ftba}")
-            else:
-                print(f"[ERROR] Unknown JSON format in {ftba}, skipping file.")
-                return  # skip instead of raising an exception
-
-        # Iterar sobre cada identificador en los datos
-        for identificador, node_data in node_logs.items():
-             if "activities" in node_data:
-                # Extraer las actividades para el identificador actual
-                activities = node_data["activities"]
-
-                # Convertir las actividades en un DataFrame
-                df = pd.json_normalize(activities.values())
-
-                # Agregar una columna para el identificador actual
-                df['id'] = identificador
-
-                # Convertir la columna de timestamp a datetime
-                # --- Handle missing timestamp column ---
-                time_col = None
-                for candidate in ["timestamp", "time", "log_time", "created_at", "Timestamp"]:
-                    if candidate in df.columns:
-                        time_col = candidate
-                        break
-
-                if time_col is None:
-                    print(f"[WARN] No timestamp column found in {ftba} (id: {identificador}), skipping this node.")
-                    continue
-
-                # Convert to datetime safely
-                df['timestamp'] = pd.to_datetime(df[time_col], errors='coerce', utc=True)
-
-                # Coerce para que ponga NaT si no puede convertir
-
-                # Debug: Verificar datos antes de concatenar
-                if df['timestamp'].isna().any():
-                    print(f"Advertencia: Identificador {identificador} tiene valores NaT antes de concatenar.")
-                else:
-                    print(f"Identificador {identificador} no tiene valores NaT antes de concatenar.")
-
-                # Concatenar el DataFrame actual con el DataFrame que contiene todas las actividades
-                df_activities = pd.concat([df_activities, df], ignore_index=True)
-
-                if df_activities['timestamp'].isna().any():
-                    print("Advertencia: Hay valores NaT en 'timestamp' después de concatenar.")
-                else:
-                    print("No hay valores NaT en 'timestamp' después de concatenar.")
-
-    # Calcula el tiempo total
-    # --- Skip files with no valid timestamps ---
-    if df_activities.empty or 'timestamp' not in df_activities.columns:
-        print(f"[WARN] No valid timestamp data found in {ftba}, skipping time-based analysis.")
+    if "logs" in data:
+        node_logs = data["logs"]
+    elif "activities" in data:
+        node_logs = {"local_node": data}
+    elif isinstance(data, dict) and all(isinstance(v, dict) for v in data.values()):
+        node_logs = {"local_node": {"activities": data}}
+        print(f"[WARN] Assuming direct activities structure for {filename}")
+    else:
+        print(f"[ERROR] Unknown format in {filename}, skipping.")
         return
 
-    # Calcula el tiempo total
-    tiempo_total = df_activities['timestamp'].max() - df_activities['timestamp'].min()
-    print(f'Tiempo total: {tiempo_total}')
-
-    # Ordena el DataFrame por el timestamp
-    df_activities = df_activities.sort_values('timestamp')
-
-    # Agrupa los datos por el código de actividad
-    # --- Group by both scheme and device type ---
-    # Normalize scheme column
-    if 'scheme' not in df_activities.columns:
-        df_activities['scheme'] = df_activities['activity_code']
-    df_activities['scheme'] = df_activities['scheme'].fillna('Unknown')
-    df_activities['scheme'] = df_activities['scheme'].apply(lambda x: get_cs_label(str(x)))
-
-    # Ensure device_type column exists
-    if 'device_type' not in df_activities.columns:
-        df_activities['device_type'] = 'Unknown'
-    df_activities['device_type'] = df_activities['device_type'].fillna('Unknown')
-
-    # Extract numeric parts from text fields
-    def extract_num(x):
-        try:
-            if isinstance(x, str):
-                x = re.findall(r'[\d.]+', x)
-                if x:
-                    return float(x[0])
-            return float(x)
-        except Exception:
-            return np.nan
-
-    for col in ['time', 'Avg_RAM', 'Peak_RAM', 'Avg_instance_RAM', 'Peak_instance_RAM',
-                'Avg_CPU', 'Peak_CPU', 'Avg_instance_CPU', 'Peak_instance_CPU', 'Ciphertext_size']:
-        if col in df_activities.columns:
-            df_activities[col] = df_activities[col].apply(extract_num)
-
-    # Drop rows with invalid or zero times
-    df_activities = df_activities[df_activities['time'].notna() & (df_activities['time'] > 0)]
-
-    # Add per-row weight proportional to execution time
-    df_activities['weight'] = df_activities.groupby(['scheme', 'device_type'])['time'].transform(lambda x: x / x.sum())
-
-    # Weighted mean helper
-    def weighted_avg(series, weights):
-        try:
-            valid = series.notna()
-            if not valid.any():
-                return np.nan
-            return np.average(series[valid], weights=weights[valid])
-        except ZeroDivisionError:
-            return np.nan
-
-    # Aggregate across all steps per scheme/device
-    # --- Aggregate across all steps per scheme/device (weighted) ---
-    agg_rows = []
-    for (scheme, device_type), group in df_activities.groupby(['scheme', 'device_type']):
-        weights = group['weight']
-
-        entry = {
-            'scheme': scheme,
-            'device_type': device_type,
-            'media_tiempo': group['time'].sum(),  # total time = sum of all step durations
-            'media_ram': weighted_avg(group['Avg_RAM'], weights),
-            'min_ram': group['Avg_RAM'].min(),
-            'max_ram': group['Peak_RAM'].max(),
-            'media_cpu': weighted_avg(group['Avg_CPU'], weights),
-            'min_cpu': group['Avg_CPU'].min(),
-            'max_cpu': group['Peak_CPU'].max(),
-            'instance_ram': weighted_avg(group['Avg_instance_RAM'], weights),
-            'instance_cpu': weighted_avg(group['Avg_instance_CPU'], weights),
-            'instance_min_ram': group['Avg_instance_RAM'].min(),
-            'instance_max_ram': group['Peak_instance_RAM'].max(),
-            'instance_min_cpu': group['Avg_instance_CPU'].min(),
-            'instance_max_cpu': group['Peak_instance_CPU'].max(),
-            'Ciphertext_size': weighted_avg(group['Ciphertext_size'], weights)
-        }
-        agg_rows.append(entry)
-
-    results = pd.DataFrame(agg_rows)
-
-    # --- Save results to text ---
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-
-    with open(os.path.join(folder_path, 'results.txt'), 'a') as f:
-        f.write(f'Tiempo total: {tiempo_total}\n')
-        for index, row in results.iterrows():
-            f.write(str(row) + '\n')
-
-    # --- Plot results ---
-    cmap = plt.get_cmap('tab20')
-    for column in [c for c in results.columns if c not in ['scheme', 'device_type']]:
-        filtered_results = results.dropna(subset=[column]).copy()
-        if filtered_results.empty:
+    # ---------------------------------------------------
+    # Collect and normalize activity records
+    # ---------------------------------------------------
+    all_activities = []
+    for node_id, node_data in node_logs.items():
+        if "activities" not in node_data:
             continue
+        node_df = pd.json_normalize(node_data["activities"].values())
+        node_df["node_id"] = node_id
+        all_activities.append(node_df)
 
-        # Iterate per device type
-        for device_type, df_device in filtered_results.groupby('device_type'):
-            df_device = df_device.sort_values('scheme')
+    if not all_activities:
+        print(f"[WARN] No activities found in {filename}.")
+        return
 
-            plt.figure(figsize=(14, max(6, len(df_device) * 0.5)))
-            colors = [cmap(i) for i in np.linspace(0, 1, len(df_device))]
+    df = pd.concat(all_activities, ignore_index=True)
 
-            plt.barh(df_device['scheme'], df_device[column], color=colors)
+    # ---------------------------------------------------
+    # Normalize and clean columns
+    # ---------------------------------------------------
+    expected_fields = [
+        "scheme", "device_type", "peer_device_type", "step", "time",
+        "Avg_RAM", "Peak_RAM", "Avg_CPU", "Peak_CPU",
+        "Avg_instance_RAM", "Peak_instance_RAM",
+        "Avg_instance_CPU", "Peak_instance_CPU",
+        "Max_Memory_MB"
+    ]
+    for col in expected_fields:
+        if col not in df.columns:
+            df[col] = np.nan
 
-            xlabel = ''
-            if column == 'media_tiempo':
-                xlabel = 'Tiempo total (s)'
-            elif 'ram' in column:
-                xlabel = 'Consumo de RAM (MB)'
-            elif 'cpu' in column:
-                xlabel = 'Uso de CPU (%)'
-            elif column == 'Ciphertext_size':
-                xlabel = 'Tamaño de cifrado (bytes)'
+    numeric_cols = [c for c in df.columns if any(x in c for x in ["time", "RAM", "CPU", "Memory"])]
+    for col in numeric_cols:
+        df[col] = df[col].apply(extract_numeric)
 
-            plt.xlabel(xlabel)
-            plt.ylabel('Algoritmo')
-            plt.title(f"{column.replace('_', ' ').upper()} - {device_type}")
+    # Normalize scheme and device fields
+    df["scheme"] = df["scheme"].astype(str).apply(get_cs_label)
+    df["device_type"] = df["device_type"].fillna("Unknown")
+    df["peer_device_type"] = df["peer_device_type"].fillna("Unknown")
 
-            # Annotate values neatly
-            for j, value in enumerate(df_device[column]):
-                plt.text(value * 1.01, j, f"{value:.2f}", va='center', fontsize=9)
+    df["role"] = df["step"].apply(
+        lambda s: "sender" if isinstance(s, str) and ("FIRST" in s or "THIRD" in s) else "receiver"
+    )
 
-            plt.tight_layout()
-            plt.savefig(os.path.join(folder_path, f"{column}_{device_type}.png"), bbox_inches='tight')
-            plt.close()
+    # ---------------------------------------------------
+    # Aggregate results (absolute metrics only)
+    # ---------------------------------------------------
+    grouped_results = []
+    group_keys = ["scheme", "device_type", "peer_device_type"]
 
-    # Calcula las medias y los picos para cada grupo
-    for name, group in grouped:
-        if group.empty:
-            continue
+    for keys, group in df.groupby(group_keys):
+        scheme, sender, receiver = keys
+        total_time = group["time"].sum()
+        weights = group["time"] / total_time if total_time > 0 else np.ones(len(group)) / len(group)
 
-        # --- Normalize and clean columns ---
-        # Device type is now explicitly logged
-        device_type = group.get('device_type', group.get('Details', 'Unknown'))
-        if isinstance(device_type, pd.Series):
-            device_type = device_type.iloc[0]
+        avg_ram = weighted_avg(group["Avg_RAM"], weights)
+        avg_cpu = weighted_avg(group["Avg_CPU"], weights)
+        ram_limit = weighted_avg(group["Max_Memory_MB"], weights)
+        avg_ram_percent = (avg_ram / ram_limit * 100) if ram_limit and ram_limit > 0 else np.nan
 
-        # Parse Ciphertext size if present
-        if 'Ciphertext_size' in group.columns:
-            group['Ciphertext_size'] = (
-                group['Ciphertext_size']
-                .astype(str)
-                .str.replace(' bytes', '', regex=False)
-                .astype(float)
-            )
-            media_cipher = group['Ciphertext_size'].mean()
-        else:
-            media_cipher = nan
+        grouped_results.append({
+            "scheme": scheme,
+            "from": sender,
+            "to": receiver,
+            "total_time": total_time,
+            "avg_ram_mb": avg_ram,
+            "avg_ram_percent": avg_ram_percent,
+            "peak_ram_mb": group["Peak_RAM"].max(),
+            "avg_cpu_percent": avg_cpu,
+            "peak_cpu_percent": group["Peak_CPU"].max(),
+            "avg_instance_ram_mb": weighted_avg(group["Avg_instance_RAM"], weights),
+            "avg_instance_cpu_percent": weighted_avg(group["Avg_instance_CPU"], weights),
+            "executions": len(group),
+        })
 
-        media_tiempo = group['time'].mean()
+    results = pd.DataFrame(grouped_results)
+    results["link"] = results["from"] + "→" + results["to"]
 
-        # Android-specific
-        if 'Android' in str(device_type):
-            # Strip units
-            for col in ['Avg_RAM', 'Peak_RAM', 'App_Avg_RAM', 'App_Peak_RAM']:
-                if col in group.columns:
-                    group[col] = group[col].astype(str).str.replace(' MB', '', regex=False).astype(float)
+    # ---------------------------------------------------
+    # Derived metrics
+    # ---------------------------------------------------
+    # Efficiency = CPU% per second (higher = better)
+    results["efficiency_index"] = results["avg_cpu_percent"] / results["total_time"]
 
-            # CPU time
-            if 'CPU_time' in group.columns:
-                group['CPU_time'] = group['CPU_time'].astype(str).str.replace(' ms', '', regex=False).astype(float)
+    # ---------------------------------------------------
+    # Slowdown ratios (per algorithm)
+    # ---------------------------------------------------
+    slowdown_data = (
+        results.pivot_table(index="scheme", columns="from", values="total_time", aggfunc="mean")
+        .fillna(np.nan)
+    )
+    if "WS" in slowdown_data.columns:
+        for device in ["Android", "IoT"]:
+            if device in slowdown_data.columns:
+                results.loc[results["from"] == device, "slowdown_vs_WS"] = (
+                    results.loc[results["from"] == device, "total_time"]
+                    / slowdown_data.loc[results["scheme"], "WS"].values
+                )
 
-            media_ram = group['Avg_RAM'].mean()
-            min_ram = group['Avg_RAM'].min()
-            max_ram = group['Peak_RAM'].max()
-            instance_ram = group['App_Avg_RAM'].mean()
-            instance_min_ram = group['App_Avg_RAM'].min()
-            instance_max_ram = group['App_Peak_RAM'].max()
-            cpu_time = group['CPU_time'].mean() if 'CPU_time' in group.columns else nan
-            min_cpu_time = group['CPU_time'].min() if 'CPU_time' in group.columns else nan
-            max_cpu_time = group['CPU_time'].max() if 'CPU_time' in group.columns else nan
+    # ---------------------------------------------------
+    # Save extended CSV
+    # ---------------------------------------------------
+    csv_file = os.path.join(out_dir, f"{os.path.splitext(filename)[0]}_results_extended.csv")
+    results.to_csv(csv_file, index=False)
+    print(f"[INFO] Saved extended aggregated results → {csv_file}")
 
-            results.loc[len(results)] = [
-                device_type, name, media_tiempo, media_ram, min_ram, max_ram,
-                None, None, None,
-                instance_ram, None, instance_min_ram, instance_max_ram, None, None,
-                cpu_time, min_cpu_time, max_cpu_time, media_cipher
-            ]
+    # ---------------------------------------------------
+    # Visualization
+    # ---------------------------------------------------
+    sns.set(style="whitegrid", font_scale=1.15)
+    cmap = plt.get_cmap("tab10")
 
-        # WS / Python-specific
-        else:
-            # Clean CPU columns
-            for col in ['Avg_CPU', 'Peak_CPU', 'Avg_instance_CPU', 'Peak_instance_CPU']:
-                if col in group.columns:
-                    # Extract only the first numeric value (ignore GHz, cores, etc.)
-                    group[col] = (
-                        group[col]
-                        .astype(str)
-                        .str.extract(r'([\d.]+)')   # get only the first number
-                        .replace('N/A', nan)
-                        .astype(float)
-                    )
-
-            # Clean RAM columns
-            for col in ['Avg_RAM', 'Peak_RAM', 'Avg_instance_RAM', 'Peak_instance_RAM']:
-                if col in group.columns:
-                    group[col] = (
-                        group[col]
-                        .astype(str)
-                        .str.extract(r'([\d.]+)')  # extract first number
-                        .replace('N/A', nan)
-                        .astype(float)
-                    )
-
-            media_ram = group['Avg_RAM'].mean()
-            min_ram = group['Avg_RAM'].min()
-            max_ram = group['Peak_RAM'].max()
-            instance_ram = group['Avg_instance_RAM'].mean()
-            instance_min_ram = group['Avg_instance_RAM'].min()
-            instance_max_ram = group['Peak_instance_RAM'].max()
-            instance_cpu = group['Avg_instance_CPU'].mean()
-            instance_min_cpu = group['Avg_instance_CPU'].min()
-            instance_max_cpu = group['Peak_instance_CPU'].max()
-            media_cpu = group['Avg_CPU'].mean()
-            min_cpu = group['Avg_CPU'].min()
-            max_cpu = group['Peak_CPU'].max()
-
-            results.loc[len(results)] = [
-                device_type, name, media_tiempo, media_ram, min_ram, max_ram,
-                media_cpu, min_cpu, max_cpu,
-                instance_ram, instance_cpu, instance_min_ram, instance_max_ram,
-                instance_min_cpu, instance_max_cpu,
-                None, None, None, media_cipher
-            ]
-
-
-    # Para guardar los gráficos y los resultados
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-
-    with open(os.path.join(folder_path, 'results.txt'), 'a') as f:
-        f.write(f'Tiempo total: {tiempo_total}\n')
-
-    # Guardamos los resultados en un archivo de texto en la carpeta de resultados
-    for index, row in results.iterrows():
-        print(row)
-        with open(os.path.join(folder_path, 'results.txt'), 'a') as f:  # a porque se va a añadir
-            f.write(str(row) + '\n')
-
-    cmap = plt.get_cmap('tab20')  # Mapa de colores para las barras
-    # Iterar sobre las columnas del DataFrame de resultados
-    for i, column in enumerate(results.columns):
-        if column not in results.columns or results[column].dropna().empty:
-            continue
-
-        if column not in ['activity_code', 'device_type']:
-            filtered_results = results.dropna(subset=[column]).copy()
-            if filtered_results.empty:
-                continue
-
-            # --- Extract normalized scheme names ---
-            filtered_results['scheme_name'] = filtered_results['activity_code'].apply(
-                lambda x: get_cs_label(str(x[0]) if isinstance(x, tuple) else str(x))
-            )
-
-            # --- Ensure consistent device names ---
-            filtered_results['device_type'] = filtered_results['device_type'].astype(str).fillna('Unknown')
-
-            # --- Iterate over each device type separately ---
-            for device_type, df_device in filtered_results.groupby('device_type'):
-                if df_device.empty:
-                    continue
-
-                # Sort by scheme for clean visuals
-                df_device = df_device.sort_values('scheme_name')
-
-                # Create label and color scheme
-                plt.figure(figsize=(14, max(6, len(df_device) * 0.5)))
-                cmap = plt.get_cmap('tab20')
-                colors = [cmap(i) for i in np.linspace(0, 1, len(df_device))]
-
-                # Plot one bar per algorithm (only for this device)
-                plt.barh(df_device['scheme_name'], df_device[column], color=colors)
-
-                # --- Axis labeling ---
-                xlabel = ''
-                if column == 'media_tiempo':
-                    xlabel = 'Tiempo medio - Segundos'
-                elif 'ram' in column:
-                    xlabel = 'Consumo de RAM - MB'
-                elif 'cpu' in column:
-                    xlabel = 'Uso de CPU - %'
-                elif column == 'Ciphertext_size':
-                    xlabel = 'Tamaño de cifrado - bytes'
-                if column in ['cpu_time', 'min_cpu_time', 'max_cpu_time']:
-                    xlabel = 'Tiempo medio de CPU - ms'
-
-                plt.xlabel(xlabel)
-                plt.ylabel('Algoritmo')
-                plt.title(f"{column.replace('_', ' ').upper()} - {device_type}")
-
-                # Annotate values without overlap
-                for j, (value, label) in enumerate(zip(df_device[column], df_device['scheme_name'])):
-                    plt.text(value * 1.01, j, str(round(value, 3)), va='center', fontsize=9)
-
-                plt.tight_layout()
-                plt.subplots_adjust(right=0.9)
-                output_file = f"{column.replace('_', '')}_{device_type}_plot.png"
-                plt.savefig(os.path.join(folder_path, output_file), bbox_inches='tight')
-                plt.close()
-
-    # Crear una figura y ejes para el gráfico
-    fig, axs = plt.subplots(7, 1, figsize=(20, 30))
-
-    # Definir una función para extraer el valor numérico de la cadena con unidades
-    def extract_numeric_value(text):
-        text = str(text)
-        match = re.search(r'[\d.]+', text)
-        if match:
-            return float(match.group())
-        return None
-
-    # Iterar sobre cada grupo de actividad
-    for name, group in grouped:
-        print(f"Procesando grupo: {name}")
-        timestamps = group['timestamp']
-        time_taken = group['time']
-        ram_usage = group['Avg_RAM']
-        cpu_usage = group['Avg_CPU'] if 'Avg_CPU' in group else None
-        instance_ram_usage = group['Avg_instance_RAM'] if 'Avg_instance_RAM' in group else None
-        instance_cpu_usage = group['Avg_instance_CPU'] if 'Avg_instance_CPU' in group else None
-        app_avg_ram = group['App_Avg_RAM'] if 'App_Avg_RAM' in group else None
-        app_cpu_time = group['CPU_time'] if 'CPU_time' in group else None
-
-        # Convertir los timestamps a minutos desde el inicio
-        min_timestamp = df_activities['timestamp'].min()
-        tiempo_en_minutos = (timestamps - min_timestamp).dt.total_seconds() / 60
-
-        # Extraer los valores numéricos sin ordenar
-        time_taken_values = time_taken.apply(extract_numeric_value)
-        ram_usage_values = ram_usage.apply(extract_numeric_value)
-        cpu_usage_values = cpu_usage.apply(extract_numeric_value) if cpu_usage is not None else None
-        instance_ram_usage_values = instance_ram_usage.apply(
-            extract_numeric_value) if instance_ram_usage is not None else None
-        instance_cpu_usage_values = instance_cpu_usage.apply(
-            extract_numeric_value) if instance_cpu_usage is not None else None
-        app_avg_ram_values = app_avg_ram.apply(extract_numeric_value) if app_avg_ram is not None else None
-        app_cpu_time_values = app_cpu_time.apply(extract_numeric_value) if app_cpu_time is not None else None
-
-        # Obtener la etiqueta de la leyenda
-        if isinstance(name, tuple):
-            scheme_or_activity, device = name
-            label = f"{get_cs_label(str(scheme_or_activity))} ({device})"
-        else:
-            label = get_label(name)
-
-        # Dibujar los gráficos como diagramas de puntos
-        axs[0].scatter(tiempo_en_minutos, time_taken_values, label=label)
-        axs[0].set_title('Tiempo de Ejecución - Unidades en segundos')
-
-        axs[1].scatter(tiempo_en_minutos, ram_usage_values, label=label)
-        axs[1].set_title('Consumo de RAM (Promedio, Android y WS - Unidades en MB)')
-        axs[1].yaxis.set_major_locator(ticker.MaxNLocator(nbins=10))
-
-        if cpu_usage_values is not None:
-            axs[2].scatter(tiempo_en_minutos, cpu_usage_values, label=label)
-            axs[2].set_title('Uso de CPU (Promedio, WS - Unidades en % de uso)')
-            axs[2].yaxis.set_major_locator(ticker.MaxNLocator(nbins=10))
-
-        if app_cpu_time_values is not None:
-            axs[3].scatter(tiempo_en_minutos, app_cpu_time_values, label=label)
-            axs[3].set_title('Tiempo de CPU de las actividades (Promedio, Android) - Unidades en ms')
-            axs[3].yaxis.set_major_locator(ticker.MaxNLocator(nbins=10))
-
-        if app_avg_ram_values is not None:
-            axs[4].scatter(tiempo_en_minutos, app_avg_ram_values, label=label)
-            axs[4].set_title('Consumo de RAM de la aplicación (Promedio, Android) - Unidades en MB')
-            axs[4].yaxis.set_major_locator(ticker.MaxNLocator(nbins=10))
-
-        if instance_cpu_usage_values is not None:
-            axs[5].scatter(tiempo_en_minutos, instance_cpu_usage_values, label=label)
-            axs[5].set_title('Uso de CPU de la instancia (Promedio, WS) - Unidades en % de uso')
-            axs[5].yaxis.set_major_locator(ticker.MaxNLocator(nbins=10))
-
-        if instance_ram_usage_values is not None:
-            axs[6].scatter(tiempo_en_minutos, instance_ram_usage_values, label=label)
-            axs[6].set_title('Consumo de RAM de la instancia (Promedio, WS) - Unidades en MB')
-            axs[6].yaxis.set_major_locator(ticker.MaxNLocator(nbins=10))
-
-    # Añadir etiquetas a los ejes y leyendas
-    for ax in axs:
-        ax.set_xlabel('Marca de tiempo de la actividad desde el inicio de la prueba (Minutos)')
-        if 'RAM' in ax.get_title():
-            ax.set_ylabel('RAM - MB')
-        elif 'Tiempo de CPU' in ax.get_title():
-            ax.set_ylabel('Tiempo - ms')
-        elif 'CPU' in ax.get_title():
-            ax.set_ylabel('CPU - %')
-        elif 'Tiempo de Ejecución' in ax.get_title():
-            ax.set_ylabel('Tiempo - Segundos')
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-
-    # Guardar la figura
+    # ========== 1. Efficiency ranking ==========
+    plt.figure(figsize=(10, 6))
+    eff_sorted = results.groupby("scheme")["efficiency_index"].mean().sort_values(ascending=False)
+    eff_sorted.plot(kind="barh", color=cmap(2))
+    plt.xlabel("Efficiency Index (CPU% / sec)")
+    plt.title("Algorithm Efficiency Ranking (Across All Devices)")
     plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, 'activity_plots.png'))
+    plt.savefig(os.path.join(out_dir, "efficiency_ranking.png"))
     plt.close()
 
+    # ========== 2. Slowdown per algorithm (WS baseline) ==========
+    slowdown_pivot = slowdown_data.div(slowdown_data["WS"], axis=0)
+    slowdown_pivot = slowdown_pivot.drop(columns=["WS"], errors="ignore")
+    if not slowdown_pivot.empty:
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(slowdown_pivot, annot=True, fmt=".2f", cmap="Reds")
+        plt.title("Slowdown Factor vs WS — Algorithm × Device")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "heatmap_slowdown_vs_WS.png"))
+        plt.close()
 
-if __name__ == '__main__':
-    # analyze_activities('dj-domain-2048-mac-s21.json', 'Experiments/Variable Keylengths/')
-    # Directorio base
-    base_dir = 'Experiments'
+    # ========== 3. RAM usage percentage ==========
+    ram_percent_pivot = results.pivot_table(index="scheme", columns="from", values="avg_ram_percent", aggfunc="mean")
+    if not ram_percent_pivot.empty:
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(ram_percent_pivot, annot=True, fmt=".1f", cmap="PuBuGn")
+        plt.title("Average RAM Usage (%) — Algorithm × Device")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "heatmap_ram_percent_per_device.png"))
+        plt.close()
 
-    # Recorrer recursivamente el directorio base
-    for root, dirs, files in os.walk(base_dir):
+    # ========== 4. Efficiency heatmap ==========
+    eff_pivot = results.pivot_table(index="scheme", columns="from", values="efficiency_index", aggfunc="mean")
+    if not eff_pivot.empty:
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(eff_pivot, annot=True, fmt=".2f", cmap="YlGnBu")
+        plt.title("Efficiency Index — Algorithm × Device")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "heatmap_efficiency_per_device.png"))
+        plt.close()
+
+    print(f"[INFO] Extended analysis complete → {out_dir}")
+
+
+# ===========================================================
+# --- Entry point ---
+# ===========================================================
+
+if __name__ == "__main__":
+    base_dir = "Experiments"
+
+    for root, _, files in os.walk(base_dir):
         for file in files:
-            # Comprobar que es un archivo JSON
-            if not file.endswith('.json'):
-                print(f'Archivo {file} no es un archivo JSON, se omitirá.')
-                continue
-            folder = root + '/'
-            print('##############################################')
-            print(f'Analizando archivo: {file} de la carpeta: {folder}')
-            analyze_activities(file, folder)
+            if file.endswith(".json"):
+                print("=========================================")
+                print(f"Analyzing {file} in {root}")
+                analyze_activities(file, root + "/")

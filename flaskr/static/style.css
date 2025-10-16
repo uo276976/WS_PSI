@@ -53,21 +53,6 @@ body {
     margin-right: 0.5rem;
   }
   
-  /* Dark mode overrides */
-  body.dark-mode {
-    background: #121212;
-    color: #e0e0e0;
-  }
-  .left-menu.dark-mode {
-    background: #1e1e1e;
-  }
-  .content.dark-mode {
-    background: #121212;
-  }
-  .card.dark-mode {
-    background: #263238 !important;
-    color: #fff !important;
-  }
   .result-block {
     border: 1px solid #ccc;
     border-radius: 4px;

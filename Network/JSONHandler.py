@@ -30,6 +30,8 @@ from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 # 1 and 2 will be executed first to stop consuming memory on the queue
 class JSONHandler:
     def __init__(self, id, my_data, domain, devices, results, new_peer_function, device_type="Unknown"):
+        self.device_type = device_type
+        
         self.CSHandlers = {
             "Paillier": PaillierHelper(),
             "DamgardJurik": DamgardJurikHelper(),
@@ -47,24 +49,24 @@ class JSONHandler:
         }
 
         # PSI
-        self.OPEHandler = OPEHandler(id, my_data, domain, devices, results)
-        self.CAOPEHandler = CAOPEHandler(id, my_data, domain, devices, results)
-        self.domainPSIHandler = DomainPSIHandler(id, my_data, domain, devices, results)
+        self.OPEHandler = OPEHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.CAOPEHandler = CAOPEHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.domainPSIHandler = DomainPSIHandler(id, my_data, domain, devices, results, device_type=self.device_type)
 
         # NIKE handlers "clásicos"
-        self.DHHandler = DHHandler(id, my_data, domain, devices, results)
-        self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results)
-        self.KyberHandler = KyberHandler(id, my_data, domain, devices, results)
-        self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results)
+        self.DHHandler = DHHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.KyberHandler = KyberHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results, device_type=self.device_type)
 
         # KEM genérico
         self.KEMHandlers = {
-            "BIKE": KEMHandler(id, my_data, domain, devices, results, "BIKE-L1"),
-            "HQC": KEMHandler(id, my_data, domain, devices, results, "HQC-128"),
-            "NTRU": KEMHandler(id, my_data, domain, devices, results, "sntrup761"),
-            "P256": KEMHandler(id, my_data, domain, devices, results, "P-256"),
-            "X25519": KEMHandler(id, my_data, domain, devices, results, "X25519"),
-            "HybridKyberX25519": KEMHandler(id, my_data, domain, devices, results, "Hybrid-Kyber-X25519"),
+            "BIKE": KEMHandler(id, my_data, domain, devices, results, "BIKE-L1", device_type=self.device_type),
+            "HQC": KEMHandler(id, my_data, domain, devices, results, "HQC-128", device_type=self.device_type),
+            "NTRU": KEMHandler(id, my_data, domain, devices, results, "sntrup761", device_type=self.device_type),
+            "P256": KEMHandler(id, my_data, domain, devices, results, "P-256", device_type=self.device_type),
+            "X25519": KEMHandler(id, my_data, domain, devices, results, "X25519", device_type=self.device_type),
+            "HybridKyberX25519": KEMHandler(id, my_data, domain, devices, results, "Hybrid-Kyber-X25519", device_type=self.device_type),
         }
 
         # NIKEHandlers indexados por nombre (string)
@@ -85,7 +87,6 @@ class JSONHandler:
         self.devices = devices
         self.executor = PriorityExecutor(max_workers=10)
         self.new_peer = new_peer_function
-        self.device_type = device_type
 
     def test_launcher(self, device, category_filter=None):
         print(f"[TEST_LAUNCHER] Device: {device}, Filter: {category_filter}")

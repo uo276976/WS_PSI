@@ -4,8 +4,8 @@ from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.LogContext import with_log_context
 
 class FrodoKEMHandler(IntersectionHandler):
-    def __init__(self, id, my_data, domain, devices, results, scheme_name="FrodoKEM"):
-        super().__init__(id, my_data, domain, devices, results)
+    def __init__(self, id, my_data, domain, devices, results, scheme_name="FrodoKEM", device_type="Unknown"):
+        super().__init__(id, my_data, domain, devices, results, device_type)
         self.scheme_name = scheme_name
 
     def intersection_first_step(self, device, cs):

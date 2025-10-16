@@ -42,75 +42,165 @@ function getNodePort() {
 }
 
 function updateDevices() {
-  $.getJSON('/api/devices')
-    .done(data => {
-      const $devices = $('#devices');
-      $devices.empty();
+  fetch('/api/devices')
+    .then(response => {
+      if (!response.ok) throw new Error("Network response was not ok");
+      return response.json();
+    })
+    .then(data => {
+      const devicesContainer = document.getElementById('devices');
+      const devicesHeader = document.getElementById('devicesConnected');
+      devicesContainer.innerHTML = '';
 
       if (data.status === NODE_NOT_CONNECTED) {
-        $('#devicesConnected').html('<h2>The node is offline</h2>');
+        devicesHeader.textContent = 'El nodo está desconectado';
         return;
       }
 
       if (Object.keys(data).length === 0) {
-        $('#devicesConnected').html('<h2>No peers discovered yet</h2>');
-        $devices.html('<p class="grey-text">Try clicking <strong>"Discover Peers"</strong> to search for nodes in the network.</p>');
+        devicesHeader.textContent = 'No se han descubierto pares aún';
+        const info = document.createElement('p');
+        info.className = 'grey-text';
+        info.innerHTML = `Prueba haciendo clic en <strong>"Buscar peers"</strong> para detectar nodos en la red.`;
+        devicesContainer.appendChild(info);
         return;
       }
 
-      $('#devicesConnected').html('<h2>Registered devices</h2>');
-      let cardsHTML = '<div class="row">';
+      devicesHeader.textContent = 'Dispositivos registrados';
 
-      $.each(data, (key, value) => {
-        let displayKey = key.replace(/:.*:/, '::');
-        let deviceType = value.device_type || "Unknown";
+      const row = document.createElement('div');
+      row.className = 'row';
 
-        cardsHTML += `
-          <div class="col s12 m6 l4">
-            <div class="card z-depth-2 ${deviceType.toLowerCase()}-device" id="card-${key}">
-              <div class="card-content">
-                <span class="card-title">${displayKey}</span>
-                <p><strong>Type:</strong> ${deviceType}</p>
-                <p>Last seen: ${value.last_seen || "N/A"}</p>
-                <div class="result-message" id="result-${key}" style="margin-top: 10px;"></div>
-              </div>
-              <div class="card-action">
-                <div class="btn-group" style="margin-bottom: 10px;">
-                  <a class="btn-small green ping-btn" data-device="${key}">Ping</a>
-                  <a class="btn-small orange" data-category="psi" data-device="${key}">Test PSI</a>
-                  <a class="btn-small blue" data-category="ope" data-device="${key}">Test OPE</a>
-                  <a class="btn-small red" data-category="nike" data-device="${key}">Test NIKE</a>
-                  <a class="btn-small light-blue" data-category="all" data-device="${key}">Test All</a>
-                </div>
-                <div class="input-field">
-                  <select class="scheme-selector" data-device="${key}" id="scheme-${key}">
-                    <option value="" disabled selected>Select a scheme</option>
-                    <option value="Paillier|PSI-CA">Cardinality - Paillier</option>
-                    <option value="DamgardJurik|PSI-CA">Cardinality - Damgard-Jurik</option>
-                    <option value="BFV|OPE">BFV</option>
-                    <option value="Diffie-Hellman|NIKE">NIKE - Diffie-Hellman</option>
-                    <option value="Kyber|NIKE">NIKE - Kyber</option>
-                    <option value="FrodoKEM|NIKE">NIKE - FrodoKEM</option>
-                    <option value="ClassicMcEliece|NIKE">NIKE - McEliece</option>
-                    <option value="NTRU|NIKE">NIKE - NTRU</option>
-                    <option value="BIKE|NIKE">NIKE - BIKE</option>
-                    <option value="HQC|NIKE">NIKE - HQC</option>
-                    <option value="X25519|NIKE">NIKE - X25519</option>
-                    <option value="P256|NIKE">NIKE - P256</option>
-                    <option value="HybridKyberX25519|NIKE">NIKE - HybridKyberX25519</option>
-                  </select>
-                  <button class="btn-small btn-dark scheme-btn" data-device="${key}">Start</button>
-                </div>
-              </div>
-            </div>
-          </div>`;
+      Object.entries(data).forEach(([key, value]) => {
+        const displayKey = key.replace(/:.*:/, '::');
+        const deviceType = value.device_type || 'Unknown';
+        const lastSeen = value.last_seen || 'N/A';
+
+        // Card structure
+        const col = document.createElement('div');
+        col.className = 'col s12 m6 l4';
+
+        const card = document.createElement('article');
+        card.className = `card z-depth-2 ${deviceType.toLowerCase()}-device`;
+        card.id = `card-${key}`;
+        card.setAttribute('role', 'region');
+        card.setAttribute('aria-label', `Dispositivo ${displayKey}`);
+
+        // Card content
+        const content = document.createElement('div');
+        content.className = 'card-content';
+
+        const title = document.createElement('h3');
+        title.className = 'card-title';
+        title.textContent = displayKey;
+
+        const typeInfo = document.createElement('p');
+        typeInfo.innerHTML = `<strong>Tipo:</strong> ${deviceType}`;
+
+        const lastSeenInfo = document.createElement('p');
+        lastSeenInfo.innerHTML = `<strong>Última conexión:</strong> ${lastSeen}`;
+
+        const resultDiv = document.createElement('div');
+        resultDiv.className = 'result-message';
+        resultDiv.id = `result-${key}`;
+
+        // Append card content
+        content.append(title, typeInfo, lastSeenInfo, resultDiv);
+
+        // Card actions
+        const actions = document.createElement('div');
+        actions.className = 'card-action';
+
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'btn-group';
+
+        // Buttons with proper semantics and event listeners
+        const buttons = [
+          { label: 'Ping', color: 'green', category: null, action: () => pingDevice(key) },
+          { label: 'Test PSI', color: 'orange', category: 'psi' },
+          { label: 'Test OPE', color: 'blue', category: 'ope' },
+          { label: 'Test NIKE', color: 'red', category: 'nike' },
+          { label: 'Test All', color: 'light-blue', category: 'all' }
+        ];
+
+        buttons.forEach(btnData => {
+          const btn = document.createElement('button');
+          btn.className = `btn-small waves-effect waves-light ${btnData.color}`;
+          btn.type = 'button';
+          btn.textContent = btnData.label;
+          btn.setAttribute('data-device', key);
+          btn.setAttribute('aria-label', `${btnData.label} en ${displayKey}`);
+
+          if (btnData.category) {
+            btn.dataset.category = btnData.category;
+            btn.addEventListener('click', () => testCategory(key, btnData.category));
+          } else {
+            btn.addEventListener('click', btnData.action);
+          }
+
+          btnGroup.appendChild(btn);
+        });
+
+        // Scheme selector and Start button
+        const schemeField = document.createElement('div');
+        schemeField.className = 'input-field flex-row';
+
+        const select = document.createElement('select');
+        select.className = 'scheme-selector';
+        select.id = `scheme-${key}`;
+        select.dataset.device = key;
+        select.setAttribute('aria-label', `Seleccionar esquema para ${displayKey}`);
+
+        const schemes = [
+          { value: '', text: 'Selecciona un esquema', disabled: true, selected: true },
+          { value: 'Paillier|PSI-CA', text: 'Cardinalidad - Paillier' },
+          { value: 'DamgardJurik|PSI-CA', text: 'Cardinalidad - Damgard-Jurik' },
+          { value: 'BFV|OPE', text: 'BFV' },
+          { value: 'Diffie-Hellman|NIKE', text: 'NIKE - Diffie-Hellman' },
+          { value: 'Kyber|NIKE', text: 'NIKE - Kyber' },
+          { value: 'FrodoKEM|NIKE', text: 'NIKE - FrodoKEM' },
+          { value: 'ClassicMcEliece|NIKE', text: 'NIKE - McEliece' },
+          { value: 'NTRU|NIKE', text: 'NIKE - NTRU' },
+          { value: 'BIKE|NIKE', text: 'NIKE - BIKE' },
+          { value: 'HQC|NIKE', text: 'NIKE - HQC' },
+          { value: 'X25519|NIKE', text: 'NIKE - X25519' },
+          { value: 'P256|NIKE', text: 'NIKE - P256' },
+          { value: 'HybridKyberX25519|NIKE', text: 'NIKE - HybridKyberX25519' }
+        ];
+
+        schemes.forEach(optData => {
+          const opt = document.createElement('option');
+          opt.value = optData.value;
+          opt.textContent = optData.text;
+          if (optData.disabled) opt.disabled = true;
+          if (optData.selected) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        const startBtn = document.createElement('button');
+        startBtn.className = 'btn-small btn-dark scheme-btn';
+        startBtn.type = 'button';
+        startBtn.textContent = 'Iniciar';
+        startBtn.dataset.device = key;
+        startBtn.addEventListener('click', () => {
+          const selectedValue = select.value;
+          runScheme(key, selectedValue);
+        });
+
+        schemeField.append(select, startBtn);
+        actions.append(btnGroup, schemeField);
+
+        card.append(content, actions);
+        col.appendChild(card);
+        row.appendChild(col);
       });
 
-      cardsHTML += '</div>';
-      $devices.html(cardsHTML);
-      $('select').formSelect();
+      devicesContainer.appendChild(row);
+
+      const selects = devicesContainer.querySelectorAll('select');
+      M.FormSelect.init(selects);
     })
-    .fail(() => showToast("Failed to load devices"));
+    .catch(() => showToast("No se pudieron cargar los dispositivos"));
 }
 
 $(document).on('click', '[data-category]', function () {
@@ -323,10 +413,20 @@ function results() {
     let structured = {};
 
     for (const [key, value] of Object.entries(results)) {
-      const parts = key.split(" ");
-      const device = parts[0] || "Unknown Device";
-      const scheme = parts[1] || "Unknown Scheme";
-      const type = parts.slice(2).join(" ") || "General";
+      let device = "Unknown Device";
+      let scheme = "Unknown Scheme";
+      let type = "General";
+
+      if (/^\d{1,3}(\.\d{1,3}){3}/.test(key)) {
+        const parts = key.split(" ");
+        device = parts.shift();
+        scheme = parts.shift() || "Unknown Scheme";
+        type = parts.join(" ") || "General";
+      } else {
+        const parts = key.split(" ");
+        scheme = parts.shift() || "Unknown Scheme";
+        type = parts.join(" ") || "General";
+      }
 
       if (!structured[device]) structured[device] = {};
       if (!structured[device][scheme]) structured[device][scheme] = {};
@@ -360,8 +460,8 @@ function results() {
         for (const [type, value] of Object.entries(types)) {
           let displayValue = value;
 
-          if (typeof displayValue === "string" && displayValue.length > 200) {
-            displayValue = displayValue.slice(0, 200) + "...";
+          if (typeof displayValue === "string" && /^[0-9a-f]+$/i.test(displayValue)) {
+            displayValue = displayValue.slice(0, 32) + "..." + displayValue.slice(-8);
           } else if (Array.isArray(displayValue)) {
             displayValue = `[${displayValue.length} elements]`;
           } else if (typeof displayValue === "object") {
@@ -386,3 +486,29 @@ function results() {
     showToast("Failed to load results from the backend");
   });
 }
+
+function mykeys() {
+  $.get('/api/mykeys', function(data) {
+    const keysHTML = `
+      <h4>Claves públicas</h4>
+      <h5>Paillier</h5>
+      <p><strong>n:</strong> ${data.pubkeyN}</p>
+      <p><strong>g:</strong> ${data.pubkeyG}</p>
+      <h5>Damgard-Jurik</h5>
+      <p><strong>n:</strong> ${data.pubkeyNDJ}</p>
+      <p><strong>s:</strong> ${data.pubkeySDJ}</p>
+      <p><strong>m:</strong> ${data.pubkeyMDJ}</p>
+    `;
+    const newWin = window.open("", "_blank");
+    newWin.document.write(`<html><body>${keysHTML}</body></html>`);
+  });
+}
+
+function my_data() {
+  $.get('/api/dataset', function(data) {
+    const html = `<h4>Dataset</h4><pre>${JSON.stringify(data.dataset, null, 2)}</pre>`;
+    const win = window.open("", "_blank");
+    win.document.write(`<html><body>${html}</body></html>`);
+  });
+}
+

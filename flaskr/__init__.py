@@ -133,7 +133,8 @@ def create_app(test_config=None):
             else:
                 pubkey_str = str(pubkey)
 
-            pubkeys[impl_obj.name] = {"public_key": pubkey_str}
+            impl_name = getattr(impl_obj, "name", impl_obj)
+            pubkeys[impl_name] = {"public_key": pubkey_str}
 
         for key, value in node.results.items():
             if "SharedKey" in key:

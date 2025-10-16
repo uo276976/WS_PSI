@@ -1,18 +1,19 @@
 import json
 
 class IntersectionHandler:
-    def __init__(self, id, my_data, domain, devices, results):
+    def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):
         self.id = id
         self.my_data = my_data
         self.domain = domain
         self.devices = devices
         self.results = results
+        self.device_type = device_type
 
     def send_message(self, peer, ser_enc_res, implementation,
                  peer_pubkey=None, step=None):
         """
         Send a JSON message for any NIKE or PSI step.
-        Compatible with new handlers using with_log_context / log_activity.
+        # Compatible with handlers using with_log_context / log_activity.
         """
         # Step fallback logic
         if step is None:

@@ -3,118 +3,124 @@ services:
   node-1:
     build: .
     container_name: ws-psi-node-1
-    ports: ["5002:5000"]
-    networks: [container_network]
+    ports:
+      - "5002:5000"
+    networks:
+      - container_network
     environment:
       - PORT=5000
       - DEVICE_TYPE=WS
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 4g
+    cpus: 2.0
+    mem_limit: 4g
+    memswap_limit: 4g
 
   node-2:
     build: .
     container_name: ws-psi-node-2
-    ports: ["5003:5000"]
-    networks: [container_network]
+    ports:
+      - "5003:5000"
+    networks:
+      - container_network
     environment:
       - PORT=5000
       - DEVICE_TYPE=WS
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 4g
+    cpus: 2.0
+    mem_limit: 4g
+    memswap_limit: 4g
 
   # --- IoT nodes ---
   node-3:
     build: .
     container_name: ws-psi-node-3
-    ports: ["5004:5000"]
-    networks: [container_network]
+    ports:
+      - "5004:5000"
+    networks:
+      - container_network
     environment:
       - PORT=5000
       - DEVICE_TYPE=IoT
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256m
+    cpus: 0.25
+    mem_limit: 256m
+    memswap_limit: 256m
 
   node-4:
     build: .
     container_name: ws-psi-node-4
-    ports: ["5005:5000"]
-    networks: [container_network]
+    ports:
+      - "5005:5000"
+    networks:
+      - container_network
     environment:
       - PORT=5000
       - DEVICE_TYPE=IoT
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256m
+    cpus: 0.25
+    mem_limit: 256m
+    memswap_limit: 256m
 
   # --- Android nodes ---
   node-5:
     build: .
     container_name: ws-psi-node-5
-    ports: ["5006:5000"]
-    networks: [container_network]
+    ports:
+      - "5006:5000"
+    networks:
+      - container_network
     environment:
       - PORT=5000
       - DEVICE_TYPE=Android
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 2g
+    cpus: 1.0
+    mem_limit: 2g
+    memswap_limit: 2g
 
   node-6:
     build: .
     container_name: ws-psi-node-6
-    ports: ["5007:5000"]
-    networks: [container_network]
+    ports:
+      - "5007:5000"
+    networks:
+      - container_network
     environment:
       - PORT=5000
       - DEVICE_TYPE=Android
       - LD_LIBRARY_PATH=/opt/oqs/lib
       - OQS_INSTALL_PATH=/opt/oqs
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 2g
+    cpus: 1.0
+    mem_limit: 2g
+    memswap_limit: 2g
 
 networks:
   container_network: {}

@@ -8,8 +8,8 @@ class KEMHandler(IntersectionHandler):
     """
     Generic handler for any KEM-based NIKE scheme using helpers with standard methods.
     """
-    def __init__(self, id, my_data, domain, devices, results, scheme_name=None):
-        super().__init__(id, my_data, domain, devices, results)
+    def __init__(self, id, my_data, domain, devices, results, scheme_name=None, device_type="Unknown"):
+        super().__init__(id, my_data, domain, devices, results, device_type)
         self.scheme_name = scheme_name or "KEM"
 
     def intersection_first_step(self, device, cs):
