@@ -9,6 +9,7 @@ class KyberHandler(IntersectionHandler):
         self.scheme_name = scheme_name
 
     def intersection_first_step(self, device, cs):
+        self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             pubkey_b64 = cs.serialize_public_key()
             size = sys.getsizeof(pubkey_b64)
@@ -16,6 +17,7 @@ class KyberHandler(IntersectionHandler):
             return 0, size
 
     def intersection_second_step(self, device, cs, _, peer_pubkey_b64):
+        self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
             peer_key_bytes = cs.reconstruct_public_key(peer_pubkey_b64)
             cs.compute_shared_key(peer_key_bytes)
@@ -32,4 +34,5 @@ class KyberHandler(IntersectionHandler):
             hexkey = cs.shared_key.hex()
             print(f"[KyberHandler] Shared key with {device}: {hexkey}")
             self.results[f"{device} Kyber SharedKey"] = hexkey
-            return None, None
+        self.stop_persistent_logging()
+        return None, None

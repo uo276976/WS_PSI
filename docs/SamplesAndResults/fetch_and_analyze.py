@@ -3,7 +3,7 @@ import json
 import datetime
 import firebase_admin
 from firebase_admin import credentials, db
-from Analyzer import analyze_activities
+from Analyzer import analyze_dir
 
 def connect_firebase():
     if not firebase_admin._apps:
@@ -20,8 +20,8 @@ def fetch_all_logs():
     ref = db.reference("/logs")
     all_logs = ref.get()
     if not all_logs:
-        print("No logs found in Firebase.")
-        return []
+        print("[Firebase] No se encontraron logs.")
+        return base_dir, []
 
     files = []
     for node_id, node_data in all_logs.items():
@@ -32,14 +32,15 @@ def fetch_all_logs():
             json.dump(node_data, f, indent=2)
 
         files.append(out_path)
-        print(f"Saved logs for {node_id} → {out_path}")
-    return files
+        print(f"[Firebase] Guardado logs de {node_id} → {out_path}")
+
+    return base_dir, files
 
 if __name__ == "__main__":
     connect_firebase()
-    logs = fetch_all_logs()
-
-    for log_file in logs:
-        print(f"Analyzing {log_file}...")
-        analyze_activities(os.path.basename(log_file), os.path.dirname(log_file) + "/")
-
+    logs_dir, files = fetch_all_logs()
+    if files:
+        print(f"\n[Analyzer] Iniciando análisis global de {len(files)} nodos...")
+        analyze_dir(logs_dir)
+    else:
+        print("[Analyzer] No hay archivos para analizar.")

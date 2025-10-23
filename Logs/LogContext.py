@@ -1,79 +1,85 @@
-import os
-import psutil
-import time
-import traceback
+import time, threading, os, psutil
 from contextlib import contextmanager
-from Logs import Logs
-from Logs.Logs import log_activity, start_logging, stop_logging, ThreadData, get_container_limits
+from Logs.Logs import get_container_limits, log_activity_to_firebase, ThreadData
 from Network.collections.DbConstants import VERSION
 
 
 @contextmanager
 def with_log_context(handler, cs, step_name, device=None):
-    """
-    Context manager to automatically start/stop logging for a handler step.
-    Collects accurate per-container CPU/memory metrics using cgroup limits.
-    """
-    print(f"[DEBUG] Entered with_log_context for {cs.imp_name} step={step_name} device={device}", flush=True)
-
-    pid = os.getpid()
-    proc = psutil.Process(pid)
-    proc.cpu_percent(interval=None)  # reset CPU counters
-
-    # Capture baseline stats
-    start_time = time.perf_counter()
-    start_mem = proc.memory_info().rss
-
-    thread_data = ThreadData()
-    start_logging(thread_data)
+    proc = psutil.Process(os.getpid())
+    cpu_cores = get_container_limits().get("cpu_cores", psutil.cpu_count())
 
     try:
-        yield thread_data
+        proc.cpu_percent(None)
+    except Exception:
+        pass
+
+    cpu_before = proc.cpu_times()
+    mem_before = proc.memory_info().rss
+    start_time = time.perf_counter()
+
+    td = handler.thread_data if getattr(handler, "logging_active", False) else ThreadData()
+
+    try:
+        yield td
     finally:
+        duration = time.perf_counter() - start_time
+        cpu_after = proc.cpu_times()
+        mem_after = proc.memory_info().rss
+
+        user_cpu = cpu_after.user - cpu_before.user
+        system_cpu = cpu_after.system - cpu_before.system
+        total_cpu_time = user_cpu + system_cpu
+
+        est_by_times = (total_cpu_time / max(duration, 1e-6) / max(cpu_cores, 1e-6)) * 100.0
+
+        sample_interval = max(SAMPLING_INTERVAL, min(0.1, duration * 1.5))
         try:
-            stop_logging(thread_data)
+            sampled = proc.cpu_percent(interval=sample_interval) / max(cpu_cores, 1e-6)
+        except Exception:
+            sampled = 0.0
 
-            end_time = time.perf_counter()
-            duration = end_time - start_time
-            end_mem = proc.memory_info().rss
-            mem_delta_mb = (end_mem - start_mem) / (1024 ** 2)
+        if duration < 0.05:
+            cpu_percent_est = sampled
+        else:
+            cpu_percent_est = 0.5 * est_by_times + 0.5 * sampled
 
-            limits = get_container_limits()
-            container_cores = limits.get("cpu_cores", psutil.cpu_count())
+        cpu_percent_est = max(0.0, min(cpu_percent_est, 100.0))
+        epsilon = 0.2
+        if 0.0 < cpu_percent_est < epsilon:
+            cpu_percent_est = epsilon
+        if 100.0 - epsilon < cpu_percent_est < 100.0:
+            cpu_percent_est = 100.0 - epsilon
 
-            # Use psutil's native percentage measurement, averaged over duration
-            cpu_percent_est = proc.cpu_percent(interval=None) / container_cores
-            cpu_percent_est = min(cpu_percent_est, 100.0)  # cap to 100%
+        ram_usage_mb = round(proc.memory_info().rss / (1024**2), 2)
 
-            thread_data.avg_instance_cpu_usage = round(cpu_percent_est, 2)
-            thread_data.peak_instance_cpu_usage = max(
-                thread_data.peak_instance_cpu_usage,
-                thread_data.avg_instance_cpu_usage,
-            )
-            thread_data.avg_instance_ram_usage += round(mem_delta_mb, 2)
+        if not getattr(handler, "logging_active", False) or not handler.thread_data:
+            td.avg_instance_cpu_usage = round(cpu_percent_est, 2)
+            td.avg_instance_ram_usage = ram_usage_mb
+        else:
+            td.avg_instance_cpu_usage = round(cpu_percent_est, 2)
+            td.avg_instance_ram_usage = ram_usage_mb
 
-            # Identify peer device type
-            peer_type = "Unknown"
-            if hasattr(handler, "devices") and device in handler.devices:
-                peer_type = handler.devices[device].get("device_type", "Unknown")
+        td_snapshot = type("TD", (), vars(td).copy())() if td is not None else ThreadData()
+        peer_type = (
+            handler.devices.get(device, {}).get("device_type", "Unknown")
+            if hasattr(handler, "devices") and device in handler.devices else "Unknown"
+        )
 
-            # Log
-            log_activity(
-                thread_data,
+        threading.Thread(
+            target=log_activity_to_firebase,
+            args=(
+                td_snapshot,
                 f"INTERSECTION_{step_name}_{cs.imp_name}",
-                duration,
+                round(duration, 6),
                 VERSION,
                 handler.id,
-                peer=device,
-                device_type=getattr(handler, "device_type", None) or "Unknown",
-                peer_device_type=peer_type,
-                scheme=cs.imp_name,
-                category=getattr(cs, "category", "NIKE"),
-                step=step_name,
-            )
-
-            print(f"[DEBUG] Logged activity for {handler.id} ({handler.device_type})", flush=True)
-
-        except Exception as e:
-            print(f"[FATAL] Exception during log_context cleanup: {e}", flush=True)
-            traceback.print_exc()
+                getattr(handler, "device_type", "Unknown"),
+                peer_type,
+                cs.imp_name,
+                getattr(cs, "category", "NIKE"),
+                step_name,
+                device,
+            ),
+            daemon=True,
+        ).start()

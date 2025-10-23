@@ -1,280 +1,276 @@
 import os
 import json
-import re
+import glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ===========================================================
-# --- Utility functions ---
-# ===========================================================
+sns.set(style="whitegrid", font_scale=1.05)
 
-def get_cs_label(name: str) -> str:
-    """Normalize cryptographic scheme names (e.g., Diffie-Hellman, Kyber)."""
-    if not name:
-        return "Unknown"
+DEVICE_ORDER = ["IoT", "Android", "WS"]
+DEVICE_COLORS = {"IoT": "#2ca02c", "Android": "#ff7f0e", "WS": "#1f77b4"}  # verde, naranja, azul
+LINKS_ORDER = [f"{a} → {b}" for a in DEVICE_ORDER for b in DEVICE_ORDER]
 
-    name_low = name.lower().replace("-", "").replace("_", "")
+# -----------------------
+# Helpers
+# -----------------------
 
-    if "paillier" in name_low:
-        return "Paillier"
-    elif "damgardjurik" in name_low:
-        return "Damgård-Jurik"
-    elif "caope" in name_low:
-        return "CA-OPE"
-    elif "domainpsi" in name_low:
-        return "Domain PSI"
-    elif "bfv" == name_low:
-        return "BFV"
-
-    # NIKE schemes
-    if "diffiehellman" in name_low:
-        return "Diffie-Hellman"
-    if "p256" in name_low:
-        return "P-256"
-    if "hybrid" in name_low and "kyber" in name_low and "x25519" in name_low:
-        return "Hybrid Kyber-X25519"
-    if "kyber" in name_low:
-        return "Kyber"
-    if "x25519" in name_low or "curve25519" in name_low:
-        return "X25519"
-    if "classicmceliece" in name_low:
-        return "Classic McEliece"
-    if "frodo" in name_low:
-        return "FrodoKEM"
-    if "ntru" in name_low:
-        return "NTRU"
-    if "bike" in name_low:
-        return "BIKE"
-    if "hqc" in name_low:
-        return "HQC"
-    return name
-
-
-def extract_numeric(x):
-    """Extract first numeric value from a string (e.g., '22.5% - 2GHz' → 22.5)."""
+def parse_cpu(val):
+    if isinstance(val, str):
+        val = val.strip()
+        if val.endswith("%"):
+            val = val[:-1]
     try:
-        if isinstance(x, str):
-            match = re.findall(r'[\d.]+', x)
-            if match:
-                return float(match[0])
-        return float(x)
+        return float(val)
     except Exception:
-        return np.nan
+        return 0.0
 
 
-def weighted_avg(series, weights):
-    """Compute weighted average, ignoring NaNs."""
-    if not isinstance(series, pd.Series):
-        series = pd.Series(series)
-    if not isinstance(weights, pd.Series):
-        weights = pd.Series(weights)
-
-    valid = series.notna() & weights.notna()
-    if not valid.any():
-        return np.nan
-
+def parse_ram_fraction(val):
+    """'Avg_instance_RAM': '108.16MB / 256.0MB' -> return fraction used (0..1)."""
+    if not isinstance(val, str):
+        return 0.0
     try:
-        return np.average(series[valid], weights=weights[valid])
-    except ZeroDivisionError:
-        return np.nan
+        txt = val.replace("MB", "").strip()
+        used_s, total_s = [x.strip() for x in txt.split("/", 1)]
+        used = float(used_s)
+        total = float(total_s)
+        return used / total if total > 0 else 0.0
+    except Exception:
+        return 0.0
 
 
-# ===========================================================
-# --- Main Analyzer ---
-# ===========================================================
+def _collect_rows(node_json):
+    acts = node_json.get("activities", {})
+    rows = []
+    for a in acts.values():
+        try:
+            rows.append({
+                "scheme": a.get("scheme", "Unknown"),
+                "category": a.get("category", "Unknown"),
+                "device_type": a.get("device_type", "Unknown"),
+                "peer_device_type": a.get("peer_device_type", "Unknown"),
+                "step": a.get("step", "Unknown"),
+                "time": float(a.get("time", 0.0)),
+                "cpu": parse_cpu(a.get("Avg_instance_CPU")),
+                "ram": parse_ram_fraction(a.get("Avg_instance_RAM")),
+            })
+        except Exception:
+            continue
+    return rows
 
-def analyze_activities(filename, folder_path):
-    """Aggregate, normalize, and visualize experiment data including slowdown and efficiency metrics."""
-    out_dir = os.path.join(folder_path, "AGGREGATED_ANALYSIS")
+
+def load_all_logs(in_dir):
+    """Concatena todos los *.json del directorio (excluye /analysis)."""
+    all_rows = []
+    for path in glob.glob(os.path.join(in_dir, "*.json")):
+        if os.path.basename(os.path.dirname(path)) == "analysis":
+            continue
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            all_rows.extend(_collect_rows(data))
+        except Exception:
+            continue
+    return pd.DataFrame(all_rows)
+
+# -----------------------
+# Analyzer
+# -----------------------
+
+def analyze_dir(in_dir):
+    df = load_all_logs(in_dir)
+    if df.empty:
+        print("[WARN] No se encontraron actividades válidas.")
+        return
+
+    out_dir = os.path.join(in_dir, "analysis")
     os.makedirs(out_dir, exist_ok=True)
 
-    print(f"\n[INFO] Analyzing {filename} ...")
+    # ==============================================================
+    # HEATMAPS GLOBALES
+    # ==============================================================
+    df["link"] = df["device_type"] + " → " + df["peer_device_type"]
 
-    # ---------------------------------------------------
-    # Load JSON data
-    # ---------------------------------------------------
-    with open(os.path.join(folder_path, filename), "r") as f:
-        data = json.load(f)
+    heat = (
+        df.groupby(["scheme", "device_type", "peer_device_type"])
+          .agg(time=("time", "mean"),
+               cpu=("cpu", "mean"),
+               ram=("ram", "mean"))
+          .reset_index()
+    )
+    heat["link"] = heat["device_type"] + " → " + heat["peer_device_type"]
+    all_schemes = sorted(heat["scheme"].unique().tolist())
 
-    if "logs" in data:
-        node_logs = data["logs"]
-    elif "activities" in data:
-        node_logs = {"local_node": data}
-    elif isinstance(data, dict) and all(isinstance(v, dict) for v in data.values()):
-        node_logs = {"local_node": {"activities": data}}
-        print(f"[WARN] Assuming direct activities structure for {filename}")
-    else:
-        print(f"[ERROR] Unknown format in {filename}, skipping.")
-        return
+    metrics_cfg = {
+        "time": ("Tiempo promedio (s)", "coolwarm"),
+        "cpu": ("CPU promedio (%)", "crest"),
+        "ram": ("RAM promedio (fracción usada)", "mako"),
+    }
 
-    # ---------------------------------------------------
-    # Collect and normalize activity records
-    # ---------------------------------------------------
-    all_activities = []
-    for node_id, node_data in node_logs.items():
-        if "activities" not in node_data:
-            continue
-        node_df = pd.json_normalize(node_data["activities"].values())
-        node_df["node_id"] = node_id
-        all_activities.append(node_df)
+    for metric, (title, cmap) in metrics_cfg.items():
+        grid = (
+            heat.pivot_table(index="scheme", columns="link", values=metric, aggfunc="mean")
+                .reindex(index=all_schemes, columns=LINKS_ORDER)
+                .astype(float)
+        )
+        plt.figure(figsize=(14, 6))
+        sns.heatmap(
+            grid, annot=True, fmt=".3f", cmap=cmap,
+            cbar_kws={"label": title},
+            linewidths=0.5, linecolor="white"
+        )
+        plt.title(f"{title} por combinación de dispositivos", fontsize=13)
+        plt.xlabel("Combinación de dispositivos")
+        plt.ylabel("Algoritmo / Esquema")
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"global_{metric}_heatmap.png"))
+        plt.close()
 
-    if not all_activities:
-        print(f"[WARN] No activities found in {filename}.")
-        return
-
-    df = pd.concat(all_activities, ignore_index=True)
-
-    # ---------------------------------------------------
-    # Normalize and clean columns
-    # ---------------------------------------------------
-    expected_fields = [
-        "scheme", "device_type", "peer_device_type", "step", "time",
-        "Avg_RAM", "Peak_RAM", "Avg_CPU", "Peak_CPU",
-        "Avg_instance_RAM", "Peak_instance_RAM",
-        "Avg_instance_CPU", "Peak_instance_CPU",
-        "Max_Memory_MB"
-    ]
-    for col in expected_fields:
-        if col not in df.columns:
-            df[col] = np.nan
-
-    numeric_cols = [c for c in df.columns if any(x in c for x in ["time", "RAM", "CPU", "Memory"])]
-    for col in numeric_cols:
-        df[col] = df[col].apply(extract_numeric)
-
-    # Normalize scheme and device fields
-    df["scheme"] = df["scheme"].astype(str).apply(get_cs_label)
-    df["device_type"] = df["device_type"].fillna("Unknown")
-    df["peer_device_type"] = df["peer_device_type"].fillna("Unknown")
-
-    df["role"] = df["step"].apply(
-        lambda s: "sender" if isinstance(s, str) and ("FIRST" in s or "THIRD" in s) else "receiver"
+    # ==============================================================
+    # HISTOGRAMAS COMBINADOS POR DEVICE
+    # ==============================================================
+    dev_summary = (
+        df.groupby(["scheme", "device_type"])
+          .agg(time=("time", "mean"),
+               cpu=("cpu", "mean"),
+               ram=("ram", "mean"))
+          .reset_index()
     )
 
-    # ---------------------------------------------------
-    # Aggregate results (absolute metrics only)
-    # ---------------------------------------------------
-    grouped_results = []
-    group_keys = ["scheme", "device_type", "peer_device_type"]
+    for metric, (title, palette) in metrics_cfg.items():
+        plt.figure(figsize=(14, 6))
+        sns.barplot(
+            data=dev_summary,
+            x="scheme", y=metric,
+            hue="device_type",
+            hue_order=DEVICE_ORDER,
+            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+            errorbar=None
+        )
+        plt.title(f"{title} promedio por esquema y tipo de dispositivo")
+        plt.xlabel("Algoritmo / Esquema")
+        plt.ylabel(title)
+        plt.xticks(rotation=45, ha="right")
+        plt.legend(title="Tipo de dispositivo")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"global_{metric}_by_device.png"))
+        plt.close()
 
-    for keys, group in df.groupby(group_keys):
-        scheme, sender, receiver = keys
-        total_time = group["time"].sum()
-        weights = group["time"] / total_time if total_time > 0 else np.ones(len(group)) / len(group)
+    # ==============================================================
+    # RESUMEN GLOBAL COMPARATIVO POR DEVICE (una gráfica por métrica)
+    # ==============================================================
 
-        avg_ram = weighted_avg(group["Avg_RAM"], weights)
-        avg_cpu = weighted_avg(group["Avg_CPU"], weights)
-        ram_limit = weighted_avg(group["Max_Memory_MB"], weights)
-        avg_ram_percent = (avg_ram / ram_limit * 100) if ram_limit and ram_limit > 0 else np.nan
-
-        grouped_results.append({
-            "scheme": scheme,
-            "from": sender,
-            "to": receiver,
-            "total_time": total_time,
-            "avg_ram_mb": avg_ram,
-            "avg_ram_percent": avg_ram_percent,
-            "peak_ram_mb": group["Peak_RAM"].max(),
-            "avg_cpu_percent": avg_cpu,
-            "peak_cpu_percent": group["Peak_CPU"].max(),
-            "avg_instance_ram_mb": weighted_avg(group["Avg_instance_RAM"], weights),
-            "avg_instance_cpu_percent": weighted_avg(group["Avg_instance_CPU"], weights),
-            "executions": len(group),
-        })
-
-    results = pd.DataFrame(grouped_results)
-    results["link"] = results["from"] + "→" + results["to"]
-
-    # ---------------------------------------------------
-    # Derived metrics
-    # ---------------------------------------------------
-    # Efficiency = CPU% per second (higher = better)
-    results["efficiency_index"] = results["avg_cpu_percent"] / results["total_time"]
-
-    # ---------------------------------------------------
-    # Slowdown ratios (per algorithm)
-    # ---------------------------------------------------
-    slowdown_data = (
-        results.pivot_table(index="scheme", columns="from", values="total_time", aggfunc="mean")
-        .fillna(np.nan)
+    global_summary = (
+        df.groupby("device_type")
+          .agg(avg_time=("time", "mean"),
+               avg_cpu=("cpu", "mean"),
+               avg_ram=("ram", "mean"))
+          .reindex(DEVICE_ORDER)
+          .reset_index()
     )
-    if "WS" in slowdown_data.columns:
-        for device in ["Android", "IoT"]:
-            if device in slowdown_data.columns:
-                results.loc[results["from"] == device, "slowdown_vs_WS"] = (
-                    results.loc[results["from"] == device, "total_time"]
-                    / slowdown_data.loc[results["scheme"], "WS"].values
-                )
 
-    # ---------------------------------------------------
-    # Save extended CSV
-    # ---------------------------------------------------
-    csv_file = os.path.join(out_dir, f"{os.path.splitext(filename)[0]}_results_extended.csv")
-    results.to_csv(csv_file, index=False)
-    print(f"[INFO] Saved extended aggregated results → {csv_file}")
+    global_means = {
+        "avg_time": df["time"].mean(),
+        "avg_cpu": df["cpu"].mean(),
+        "avg_ram": df["ram"].mean(),
+        "total_samples": len(df),
+        "device_types": df["device_type"].nunique(),
+        "schemes": df["scheme"].nunique()
+    }
 
-    # ---------------------------------------------------
-    # Visualization
-    # ---------------------------------------------------
-    sns.set(style="whitegrid", font_scale=1.15)
-    cmap = plt.get_cmap("tab10")
+    with open(os.path.join(out_dir, "global_summary.json"), "w") as f:
+        json.dump({
+            "overall": global_means,
+            "by_device": global_summary.to_dict(orient="records")
+        }, f, indent=2)
 
-    # ========== 1. Efficiency ranking ==========
-    plt.figure(figsize=(10, 6))
-    eff_sorted = results.groupby("scheme")["efficiency_index"].mean().sort_values(ascending=False)
-    eff_sorted.plot(kind="barh", color=cmap(2))
-    plt.xlabel("Efficiency Index (CPU% / sec)")
-    plt.title("Algorithm Efficiency Ranking (Across All Devices)")
+    # --- Tiempo promedio por dispositivo ---
+    plt.figure(figsize=(7, 5))
+    sns.barplot(
+        data=global_summary,
+        x="device_type", y="avg_time",
+        order=DEVICE_ORDER,
+        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+        errorbar=None
+    )
+    plt.title("Tiempo promedio por tipo de dispositivo (s)")
+    plt.xlabel("Tipo de dispositivo")
+    plt.ylabel("Tiempo promedio (s)")
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "efficiency_ranking.png"))
+    plt.savefig(os.path.join(out_dir, "global_summary_time.png"))
     plt.close()
 
-    # ========== 2. Slowdown per algorithm (WS baseline) ==========
-    slowdown_pivot = slowdown_data.div(slowdown_data["WS"], axis=0)
-    slowdown_pivot = slowdown_pivot.drop(columns=["WS"], errors="ignore")
-    if not slowdown_pivot.empty:
-        plt.figure(figsize=(10, 6))
-        sns.heatmap(slowdown_pivot, annot=True, fmt=".2f", cmap="Reds")
-        plt.title("Slowdown Factor vs WS — Algorithm × Device")
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, "heatmap_slowdown_vs_WS.png"))
-        plt.close()
+    # --- CPU promedio por dispositivo ---
+    plt.figure(figsize=(7, 5))
+    sns.barplot(
+        data=global_summary,
+        x="device_type", y="avg_cpu",
+        order=DEVICE_ORDER,
+        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+        errorbar=None
+    )
+    plt.title("CPU promedio por tipo de dispositivo (%)")
+    plt.xlabel("Tipo de dispositivo")
+    plt.ylabel("CPU promedio (%)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "global_summary_cpu.png"))
+    plt.close()
 
-    # ========== 3. RAM usage percentage ==========
-    ram_percent_pivot = results.pivot_table(index="scheme", columns="from", values="avg_ram_percent", aggfunc="mean")
-    if not ram_percent_pivot.empty:
-        plt.figure(figsize=(10, 6))
-        sns.heatmap(ram_percent_pivot, annot=True, fmt=".1f", cmap="PuBuGn")
-        plt.title("Average RAM Usage (%) — Algorithm × Device")
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, "heatmap_ram_percent_per_device.png"))
-        plt.close()
+    # --- RAM promedio por dispositivo ---
+    plt.figure(figsize=(7, 5))
+    sns.barplot(
+        data=global_summary,
+        x="device_type", y="avg_ram",
+        order=DEVICE_ORDER,
+        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+        errorbar=None
+    )
+    plt.title("RAM promedio por tipo de dispositivo (fracción usada)")
+    plt.xlabel("Tipo de dispositivo")
+    plt.ylabel("RAM promedio (fracción usada)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "global_summary_ram.png"))
+    plt.close()
 
-    # ========== 4. Efficiency heatmap ==========
-    eff_pivot = results.pivot_table(index="scheme", columns="from", values="efficiency_index", aggfunc="mean")
-    if not eff_pivot.empty:
-        plt.figure(figsize=(10, 6))
-        sns.heatmap(eff_pivot, annot=True, fmt=".2f", cmap="YlGnBu")
-        plt.title("Efficiency Index — Algorithm × Device")
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, "heatmap_efficiency_per_device.png"))
-        plt.close()
+    # ==============================================================
+    # RENDIMIENTO GLOBAL COMBINADO
+    # ==============================================================
+    # Promedios por device
+    perf_df = (
+        df.groupby("device_type")
+          .agg(avg_time=("time", "mean"),
+               avg_cpu=("cpu", "mean"),
+               avg_ram=("ram", "mean"))
+          .reset_index()
+    )
 
-    print(f"[INFO] Extended analysis complete → {out_dir}")
+    # Normalización y cálculo de índice
+    max_time = perf_df["avg_time"].max() or 1
+    perf_df["norm_time"] = 1 - (perf_df["avg_time"] / max_time)
+    perf_df["norm_cpu"] = 1 - (perf_df["avg_cpu"] / 100)
+    perf_df["norm_ram"] = 1 - perf_df["avg_ram"]
 
+    perf_df["performance_index"] = (
+        0.6 * perf_df["norm_time"] + 0.2 * perf_df["norm_cpu"] + 0.2 * perf_df["norm_ram"]
+    )
 
-# ===========================================================
-# --- Entry point ---
-# ===========================================================
+    plt.figure(figsize=(8, 5))
+    sns.barplot(
+        data=perf_df,
+        x="device_type", y="performance_index",
+        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+        order=DEVICE_ORDER
+    )
+    plt.title("Índice de rendimiento general (Tiempo + CPU + RAM)")
+    plt.ylabel("Puntuación normalizada (0–1, más alto es mejor)")
+    plt.xlabel("Tipo de dispositivo")
+    plt.ylim(0, 1)
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "global_performance_index.png"))
+    plt.close()
 
-if __name__ == "__main__":
-    base_dir = "Experiments"
-
-    for root, _, files in os.walk(base_dir):
-        for file in files:
-            if file.endswith(".json"):
-                print("=========================================")
-                print(f"Analyzing {file} in {root}")
-                analyze_activities(file, root + "/")
+    print(f"[OK] Análisis completado → {out_dir}")
+    print(f"[Resumen global]: {json.dumps(global_means, indent=2)}")

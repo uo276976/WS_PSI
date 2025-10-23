@@ -273,42 +273,73 @@ def create_app(test_config=None):
     @node_wrapper
     def api_summary(node):
         logs = Logs.get_logs(node.id)
-        summary = {}
-        categories = {}
+        if not logs:
+            return jsonify({"summary": [], "categories": []})
 
-        for _, entry in logs.items():
-            if "activity_code" in entry and entry["activity_code"].startswith("INTERSECTION_FINAL_STEP"):
-                parts = entry["activity_code"].split("_")
+        from collections import defaultdict
+
+        summary = defaultdict(lambda: {
+            "times": [],
+            "cpus": [],
+            "rams": [],
+            "category": "Unknown",
+            "steps": set(),
+            "devices": set()
+        })
+
+        for entry in logs.values():
+            if not isinstance(entry, dict):
+                continue
+
+            scheme = entry.get("scheme")
+            if not scheme:
+                code = entry.get("activity_code", "")
+                parts = code.split("_")
                 if len(parts) >= 4:
                     scheme = parts[3]
-                    category = entry.get("category", "Unknown")  # Optional fallback
+                else:
+                    continue
 
-                    if scheme not in summary:
-                        summary[scheme] = {
-                            "scheme": scheme,
-                            "times": [],
-                            "category": category
-                        }
+            time_val = float(entry.get("time", 0))
+            cpu_val = float(str(entry.get("Avg_instance_CPU", "0")).replace("%", ""))
+            ram_raw = str(entry.get("Avg_instance_RAM", "0"))
+            ram_val = 0.0
+            if "MB" in ram_raw:
+                try:
+                    ram_val = float(ram_raw.split("MB")[0].strip())
+                except:
+                    pass
 
-                    summary[scheme]["times"].append(entry["time"])
+            category = entry.get("category", "Unknown")
+            step = entry.get("step", "Unknown")
+            device_type = entry.get("device_type", "Unknown")
 
-                    # Track category
-                    categories[scheme] = category
+            s = summary[scheme]
+            s["times"].append(time_val)
+            s["cpus"].append(cpu_val)
+            s["rams"].append(ram_val)
+            s["category"] = category
+            s["steps"].add(step)
+            s["devices"].add(device_type)
 
         output = []
-        for scheme, values in summary.items():
-            avg_time = round(sum(values["times"]) / len(values["times"]), 3)
+        for scheme, vals in summary.items():
+            n = max(len(vals["times"]), 1)
             output.append({
                 "scheme": scheme,
-                "avg_time": avg_time,
-                "category": values["category"]
+                "avg_time": round(sum(vals["times"]) / n, 3),
+                "avg_cpu": round(sum(vals["cpus"]) / n, 2),
+                "avg_ram": round(sum(vals["rams"]) / n, 2),
+                "category": vals["category"],
+                "steps": sorted(vals["steps"]),
+                "devices": sorted(vals["devices"]),
+                "count": n
             })
 
-        unique_categories = sorted(set(categories.values()))
-
+        categories = sorted({v["category"] for v in output})
         return jsonify({
             "summary": output,
-            "categories": unique_categories
+            "categories": categories
         })
 
 

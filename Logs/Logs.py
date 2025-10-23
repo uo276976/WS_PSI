@@ -1,441 +1,285 @@
-import datetime
-import os
-import threading
-import time
-import numpy as np
-
-import firebase_admin
-import psutil
-import platform
-
-from firebase_admin import credentials, db
-
+import datetime, os, psutil, threading, time, platform, numpy as np
+from firebase_admin import credentials, db, initialize_app
 from Network.collections.DbConstants import FB_URL
 
-global default_app
+
 SAMPLING_INTERVAL = 0.05
+default_app = None
 
-def get_container_limits():
-    """
-    Detect CPU and memory limits enforced by Docker/Kubernetes (cgroups).
-    Returns dict with 'cpu_cores' and 'memory_mb' fields.
-    Falls back to host values if not limited.
-    """
-    cpu_quota = None
-    cpu_period = None
-    mem_limit = None
-
-    # --- CPU limits ---
-    cpu_paths = [
-        "/sys/fs/cgroup/cpu/cpu.cfs_quota_us",
-        "/sys/fs/cgroup/cpu.max"
-    ]
-    for path in cpu_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, "r") as f:
-                    content = f.read().strip()
-                    if " " in content:
-                        quota_str, period_str = content.split()
-                        if quota_str != "max":
-                            cpu_quota = int(quota_str)
-                            cpu_period = int(period_str)
-                    else:
-                        cpu_quota = int(content)
-                        with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us", "r") as f2:
-                            cpu_period = int(f2.read().strip())
-            except Exception:
-                pass
-            break
-
-    # --- Memory limits ---
-    for path in [
-        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
-        "/sys/fs/cgroup/memory.max"
-    ]:
-        if os.path.exists(path):
-            try:
-                with open(path, "r") as f:
-                    val = f.read().strip()
-                    if val.isdigit():
-                        mem_limit = int(val)
-                        break
-            except Exception:
-                pass
-
-    # Compute effective CPU cores available to the container
-    if cpu_quota and cpu_period and cpu_quota > 0:
-        cpu_cores = cpu_quota / cpu_period
-    else:
-        cpu_cores = psutil.cpu_count()  # fall back to host count if unlimited
-
-    # Compute effective memory in MB
-    if mem_limit and mem_limit > 0 and mem_limit < psutil.virtual_memory().total:
-        memory_mb = mem_limit / (1024 ** 2)
-    else:
-        memory_mb = psutil.virtual_memory().total / (1024 ** 2)
-
-    return {
-        "cpu_cores": round(cpu_cores, 2),
-        "memory_mb": round(memory_mb, 2)
-    }
-
-
-def get_container_memory_usage():
-    """
-    Reads current container memory usage (in MB) using cgroup data.
-    Falls back to psutil.virtual_memory().used if not in container.
-    """
-    paths = [
-        "/sys/fs/cgroup/memory/memory.usage_in_bytes",
-        "/sys/fs/cgroup/memory.current"
-    ]
-    for path in paths:
-        if os.path.exists(path):
-            try:
-                with open(path, "r") as f:
-                    usage = int(f.read().strip())
-                    return round(usage / (1024 ** 2), 2)
-            except Exception:
-                pass
-    return round(psutil.virtual_memory().used / (1024 ** 2), 2)
-
-
-# Detect limits once at startup
-container_limits = get_container_limits()
-
-DEVICE_PROFILES = {
-    "WS": {
-        "max_cpu_cores": min(4, container_limits["cpu_cores"]),
-        "max_memory_mb": min(4096, container_limits["memory_mb"]),
-        "description": "Workstation (high performance desktop/server)"
-    },
-    "Android": {
-        "max_cpu_cores": min(2, container_limits["cpu_cores"]),
-        "max_memory_mb": min(2048, container_limits["memory_mb"]),
-        "description": "Mobile device (mid-range phone/tablet)"
-    },
-    "IoT": {
-        "max_cpu_cores": min(1, container_limits["cpu_cores"]),
-        "max_memory_mb": min(256, container_limits["memory_mb"]),
-        "description": "Embedded/IoT board (Raspberry Pi / ESP32 class)"
-    },
-    "Unknown": {
-        "max_cpu_cores": container_limits["cpu_cores"],
-        "max_memory_mb": container_limits["memory_mb"],
-        "description": "Default host capacity (detected)"
-    }
-}
 
 def connect_firebase():
+    """
+    Initialize Firebase if credentials are available.
+    """
     global default_app
     if default_app is not None:
-        return "Firebase was already connected"
-    # Path to Firebase credentials, this file is not provided!!!
+        return "Firebase already connected"
     try:
         cred = credentials.Certificate('./FirebaseCredentials.json')
-        default_app = firebase_admin.initialize_app(cred, {
-            'databaseURL': FB_URL
-        })
-        print(f"Connected to Firebase database: {default_app.project_id}")
-        return f"Connected to Firebase database: {default_app.project_id}"
-    except FileNotFoundError:
+        default_app = initialize_app(cred, {'databaseURL': FB_URL})
+        print(f"[FIREBASE] Connected to Firebase project {default_app.project_id}")
+        return f"Connected to Firebase project {default_app.project_id}"
+    except Exception as e:
+        print(f"[FIREBASE][WARN] Firebase not available: {e}")
         default_app = None
-        print("Firebase credentials not found, please provide the file in the root directory")
-        print("The application will not log data to Firebase")
-        return "Firebase credentials not found, please provide the file in the root directory"
-
+        return f"Firebase not available: {e}"
 
 def disconnect_firebase():
+    """
+    Disconnect Firebase app.
+    """
     global default_app
     if default_app is not None:
-        firebase_admin.delete_app(default_app)
+        from firebase_admin import delete_app
+        delete_app(default_app)
         default_app = None
-        print("Disconnected from Firebase database - No logging to RTDB will be done")
-        return "Disconnected from Firebase database - No logging to RTDB will be done"
-    else:
-        return "Firebase was not connected"
+        print("[FIREBASE] Disconnected.")
+        return "Firebase disconnected"
+    return "Firebase was not connected"
 
-
-# noinspection PyRedeclaration
-default_app = None
 connect_firebase()
-
-
-def firebase_connected(func):
-    def wrapper(*args, **kwargs):
-        if default_app is None:
-            print("[FIREBASE] Not connected, skipping log.")
-            return
-        return func(*args, **kwargs)
-
-    return wrapper
 
 
 class ThreadData:
     def __init__(self):
-        self.cpu_usage = []
-        self.ram_usage = []
-        self.instance_ram_usage = []
-        self.instance_cpu_usage = []
-        self.avg_cpu_usage = 0
-        self.avg_ram_usage = 0
-        self.avg_instance_ram_usage = 0
-        self.avg_instance_cpu_usage = 0
-        self.peak_cpu_usage = 0
-        self.peak_ram_usage = 0
-        self.peak_instance_ram_usage = 0
-        self.peak_instance_cpu_usage = 0
+        self.cpu_usage, self.ram_usage = [], []
+        self.instance_cpu_usage, self.instance_ram_usage = [], []
+        self.avg_cpu_usage = self.avg_ram_usage = 0
+        self.avg_instance_cpu_usage = self.avg_instance_ram_usage = 0
+        self.peak_cpu_usage = self.peak_ram_usage = 0
+        self.peak_instance_cpu_usage = self.peak_instance_ram_usage = 0
         self.stop_event = threading.Event()
 
-
-@firebase_connected
-def log_activity(thread_data, activity_code, ttlog, version, id, peer=False,
-                 my_data_size=None, ciphertext_size=None, scheme=None, category=None,
-                 device_type=None, peer_device_type=None, step=None):
-
-    profile = DEVICE_PROFILES.get(device_type, DEVICE_PROFILES["Unknown"])
-    max_cores = profile["max_cpu_cores"]
-    max_mem = profile["max_memory_mb"]
-
-    relative_cpu_load = round(
-        (thread_data.avg_instance_cpu_usage / (100 / profile["max_cpu_cores"])) * 100, 2
-    )
-    relative_ram_load = round(thread_data.avg_instance_ram_usage, 2)
-
-    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    log = {
-        "id": id,
-        "timestamp": timestamp,
-        "version": version,
-        "device_type": device_type,
-        "peer_device_type": peer_device_type or "Unknown",
-        "Details": f"{get_system_info()} - {profile['description']}",
-        "activity_code": activity_code,
-        "time": round(ttlog, 3),
-
-        "Avg_RAM": get_ram_info(thread_data),
-        "Peak_RAM": f"{thread_data.peak_ram_usage} MB",
-        "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage} MB",
-        "Peak_instance_RAM": f"{thread_data.peak_instance_ram_usage} MB",
-        "Avg_CPU": f"{thread_data.avg_cpu_usage}% - {get_cpu_info()}",
-        "Peak_CPU": f"{thread_data.peak_cpu_usage}%",
-        "Avg_instance_CPU": f"{thread_data.avg_instance_cpu_usage}%",
-        "Peak_instance_CPU": f"{thread_data.peak_instance_cpu_usage}%",
-        "Relative_CPU_Load": f"{relative_cpu_load}%",
-        "Relative_RAM_Load": f"{relative_ram_load}%",
-        "Resource_Profile": profile["description"],
-        "Max_CPU_Cores": max_cores,
-        "Max_Memory_MB": max_mem,
-    }
-
-    if peer:
-        log["peer"] = peer
-    if my_data_size is not None:
-        log["Cleartext_size"] = f"{my_data_size} bytes"
-    if ciphertext_size is not None:
-        log["Ciphertext_size"] = f"{ciphertext_size} bytes"
-    if scheme:
-        log["scheme"] = scheme
-    if category:
-        log["category"] = category
-    if step:
-        log["step"] = step
-
-    ref = db.reference(f"/logs/{get_formatted_id(id)}/activities")
+def get_container_limits():
+    cpu_cores = psutil.cpu_count()
+    mem_limit_bytes = psutil.virtual_memory().total
+    try:
+        if os.path.exists("/sys/fs/cgroup/cpu.max"):
+            with open("/sys/fs/cgroup/cpu.max") as f:
+                quota, period = f.read().strip().split()
+                if quota != "max":
+                    cpu_cores = round(int(quota) / int(period), 2)
+        elif os.path.exists("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"):
+            with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as f1, open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as f2:
+                quota, period = int(f1.read()), int(f2.read())
+                if quota > 0:
+                    cpu_cores = round(quota / period, 2)
+    except:
+        pass
 
     try:
+        if os.path.exists("/sys/fs/cgroup/memory.max"):
+            with open("/sys/fs/cgroup/memory.max") as f:
+                val = f.read().strip()
+                if val.isdigit():
+                    mem_limit_bytes = int(val)
+    except:
+        pass
+
+    cpu_env, mem_env = os.getenv("CPU_CORES"), os.getenv("MEMORY_MB")
+    if cpu_env:
+        cpu_cores = float(cpu_env)
+    if mem_env:
+        mem_limit_bytes = float(mem_env) * 1024 * 1024
+    return {"cpu_cores": max(cpu_cores, 0.25), "memory_mb": round(mem_limit_bytes / (1024**2), 2)}
+
+def get_container_memory_usage():
+    paths = ["/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"]
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                with open(p) as f:
+                    return round(int(f.read().strip()) / (1024**2), 2)
+            except:
+                pass
+    return round(psutil.virtual_memory().used / (1024**2), 2)
+
+def log_cpu_usage(td: ThreadData):
+    proc = psutil.Process(os.getpid())
+    while not td.stop_event.is_set():
+        td.cpu_usage.append(proc.cpu_percent(interval=None))
+        time.sleep(SAMPLING_INTERVAL)
+
+def log_instance_cpu_usage(td: ThreadData):
+    proc = psutil.Process(os.getpid())
+    limits = get_container_limits()
+    cores = max(1e-3, limits["cpu_cores"])
+
+    try:
+        proc.cpu_percent(None)
+    except Exception:
+        pass
+
+    while not td.stop_event.is_set():
+        try:
+            raw = proc.cpu_percent(interval=SAMPLING_INTERVAL)
+            est = raw / max(cores, 1e-6)
+            if td.instance_cpu_usage:
+                prev = td.instance_cpu_usage[-1]
+                est = 0.7 * prev + 0.3 * est
+
+            epsilon = 0.2
+            if 0.0 < est < epsilon:
+                est = epsilon
+            elif 100.0 - epsilon < est < 100.0:
+                est = 100.0 - epsilon
+
+            td.instance_cpu_usage.append(round(min(100.0, max(0.0, est)), 2))
+
+        except Exception:
+            td.instance_cpu_usage.append(0.0)
+
+        time.sleep(SAMPLING_INTERVAL)
+
+def log_ram_usage(td: ThreadData):
+    prev = None
+    while not td.stop_event.is_set():
+        try:
+            current = get_container_memory_usage()
+
+            if prev is not None:
+                current = 0.7 * prev + 0.3 * current
+            prev = current
+
+            if current < 0:
+                current = 0.0
+            td.ram_usage.append(round(current, 2))
+
+        except Exception:
+            td.ram_usage.append(0.0)
+
+        time.sleep(SAMPLING_INTERVAL)
+
+
+def log_instance_ram_usage(td: ThreadData):
+    proc = psutil.Process(os.getpid())
+    prev = None
+    while not td.stop_event.is_set():
+        try:
+            rss_mb = round(proc.memory_info().rss / (1024 ** 2), 2)
+
+            if prev is not None:
+                rss_mb = 0.7 * prev + 0.3 * rss_mb
+            prev = rss_mb
+
+            if rss_mb < 0:
+                rss_mb = 0.0
+
+            td.instance_ram_usage.append(round(rss_mb, 2))
+
+        except Exception:
+            td.instance_ram_usage.append(0.0)
+
+        time.sleep(SAMPLING_INTERVAL)
+
+def start_logging(td: ThreadData):
+    td.stop_event.clear()
+    for fn in [log_cpu_usage, log_instance_cpu_usage, log_ram_usage, log_instance_ram_usage]:
+        threading.Thread(target=fn, args=(td,), daemon=True).start()
+
+def stop_logging(td: ThreadData):
+    td.stop_event.set()
+    time.sleep(0.05)
+    _aggregate_stats(td)
+
+def _aggregate_stats(td: ThreadData):
+    def avg_and_peak(v):
+        if not v:
+            return 0.0, 0.0
+        vals = [x for x in v if 0 < x < 1000]
+        if not vals:
+            return 0.0, 0.0
+        tail = vals[-max(1, len(vals)//5):]
+        return round(np.mean(tail), 2), round(np.max(tail), 2)
+    td.avg_cpu_usage, td.peak_cpu_usage = avg_and_peak(td.cpu_usage)
+    td.avg_instance_cpu_usage, td.peak_instance_cpu_usage = avg_and_peak(td.instance_cpu_usage)
+    td.avg_ram_usage, td.peak_ram_usage = avg_and_peak(td.ram_usage)
+    td.avg_instance_ram_usage, td.peak_instance_ram_usage = avg_and_peak(td.instance_ram_usage)
+
+
+def _push_log_async(ref, log):
+    try:
         ref.push(log)
-        print(f"[FIREBASE] Activity log sent to Firebase for {activity_code} ({device_type} → {peer_device_type})")
+        activity = log.get("activity_code")
+        if activity:
+            print(f"[FIREBASE] Log pushed: {activity} ({log.get('device_type')}→{log.get('peer_device_type')})")
+        else:
+            print(f"[FIREBASE] Setup log pushed for {log.get('id')}")
     except Exception as e:
-        print(f"[FIREBASE][ERROR] Failed to push log for {activity_code}: {e}")
-        
-
-def get_ram_info(thread_data):
-    total_mem = container_limits["memory_mb"]
-    mem_use_percent = round(thread_data.avg_ram_usage / total_mem * 100, 2)
-    return f"{thread_data.avg_ram_usage} MB / {total_mem} MB - {mem_use_percent}%"
+        print(f"[FIREBASE][ERROR] Failed to push log: {e}")
 
 
-def get_cpu_info():
+def log_activity_to_firebase(thread_data, activity_code, duration, version, handler_id,
+                             device_type, peer_device_type, scheme, category, step, peer=None):
+    if not default_app:
+        print("[FIREBASE] Not connected.")
+        return
+
     limits = get_container_limits()
-    cpu_freq = psutil.cpu_freq().current / 1000 if psutil.cpu_freq() else 0
-    return f"{cpu_freq:.2f} GHz - limited to {limits['cpu_cores']} cores (container)"
-
-
-def get_system_info():
-    return f"{platform.platform()} - {platform.machine()}"
-
-
-@firebase_connected
-def get_logs(id):
-    ref = db.reference(f"/logs/{get_formatted_id(id)}/activities")
-    return ref.get()
-
-
-def start_logging(thread_data):
-    """Inicia los hilos de muestreo de CPU y RAM del sistema y del proceso actual."""
-    pid = os.getpid()
-    proc = psutil.Process(pid)
-
-    proc.cpu_percent(interval=None)
-
-    # First immediate samples
-    thread_data.cpu_usage.append(psutil.cpu_percent(interval=0.05))
-    thread_data.ram_usage.append(get_container_memory_usage())
-    thread_data.instance_ram_usage.append(round(proc.memory_info().rss / (1024 ** 2), 2))
-    thread_data.instance_cpu_usage.append(proc.cpu_percent(interval=0.05))
-
-    threads = [
-        threading.Thread(target=log_instance_ram_usage, args=(thread_data,), daemon=True),
-        threading.Thread(target=log_instance_cpu_usage, args=(thread_data,), daemon=True),
-        threading.Thread(target=log_cpu_usage, args=(thread_data,), daemon=True),
-        threading.Thread(target=log_ram_usage, args=(thread_data,), daemon=True),
-    ]
-
-    thread_data.threads = threads
+    profile_mem = limits["memory_mb"]
+    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     
-    for t in threads:
-        t.start()
+    if thread_data is None:
+        print(f"[FIREBASE][WARN] Missing thread_data for {activity_code}, skipping metrics.")
+        thread_data = type("EmptyTD", (), {
+            "avg_instance_cpu_usage": 0.0,
+            "avg_instance_ram_usage": 0.0,
+        })()
 
-
-def stop_logging(thread_data):
-    """Gracefully stop sampling threads and compute aggregated stats."""
-    thread_data.stop_event.set()
-    for t in getattr(thread_data, "threads", []):
-        t.join(timeout=0.2)
-    _aggregate_stats(thread_data)
-
-def _aggregate_stats(thread_data):
-    """Aggregate averages and peaks from recorded samples."""
-    
-    thread_data.avg_cpu_usage, thread_data.peak_cpu_usage = avg_and_peak(thread_data.cpu_usage)
-    thread_data.avg_instance_cpu_usage, thread_data.peak_instance_cpu_usage = avg_and_peak(thread_data.instance_cpu_usage)
-    thread_data.avg_ram_usage, thread_data.peak_ram_usage = avg_and_peak(thread_data.ram_usage)
-    thread_data.avg_instance_ram_usage, thread_data.peak_instance_ram_usage = avg_and_peak(thread_data.instance_ram_usage)
-
-def avg_and_peak(values):
-    if not values:
-        return 0.0, 0.0
-    tail = values[-max(1, len(values)//5):]
-    avg = np.mean(tail)
-    return round(avg, 2), round(np.max(values), 2)
-
-def stop_logging_cpu_usage(thread_data):
-    if len(thread_data.cpu_usage) == 0:
-        # fallback to a single psutil reading
-        thread_data.cpu_usage = [psutil.cpu_percent(interval=0.1)]
-    thread_data.avg_cpu_usage = round(sum(thread_data.cpu_usage) / len(thread_data.cpu_usage), 2)
-    thread_data.peak_cpu_usage = round(max(thread_data.cpu_usage), 2)
-
-    if len(thread_data.instance_cpu_usage) == 0:
-        pid = os.getpid()
-        proc = psutil.Process(pid)
-        thread_data.instance_cpu_usage = [proc.cpu_percent(interval=0.1)]
-    thread_data.avg_instance_cpu_usage = round(sum(thread_data.instance_cpu_usage) / len(thread_data.instance_cpu_usage), 2)
-    thread_data.peak_instance_cpu_usage = round(max(thread_data.instance_cpu_usage), 2)
-
-
-def stop_logging_ram_usage(thread_data):
-    if len(thread_data.ram_usage) == 0:
-        thread_data.ram_usage = [psutil.virtual_memory().used / (1024 ** 2)]
-    thread_data.avg_ram_usage = round(sum(thread_data.ram_usage) / len(thread_data.ram_usage), 2)
-    thread_data.peak_ram_usage = round(max(thread_data.ram_usage), 2)
-
-    if len(thread_data.instance_ram_usage) == 0:
-        pid = os.getpid()
-        proc = psutil.Process(pid)
-        thread_data.instance_ram_usage = [round(proc.memory_info().rss / (1024 ** 2), 2)]
-    thread_data.avg_instance_ram_usage = round(sum(thread_data.instance_ram_usage) / len(thread_data.instance_ram_usage), 2)
-    thread_data.peak_instance_ram_usage = round(max(thread_data.instance_ram_usage), 2)
-
-
-def log_cpu_usage(thread_data):
-    """System-wide CPU usage sampling."""
-    while not thread_data.stop_event.is_set():
-        value = psutil.cpu_percent(interval=None)
-        thread_data.cpu_usage.append(value)
-        time.sleep(SAMPLING_INTERVAL)
-    return
-
-
-def log_instance_cpu_usage(thread_data):
-    """Per-process CPU usage sampling (scaled to container limit)."""
-    pid = os.getpid()
-    proc = psutil.Process(pid)
-    limits = get_container_limits()
-    container_cores = max(1e-3, limits.get("cpu_cores", psutil.cpu_count()))
-    proc.cpu_percent(interval=None)
-    while not thread_data.stop_event.is_set():
-        raw_percent = proc.cpu_percent(interval=SAMPLING_INTERVAL)
-        scaled = min(100.0, raw_percent / container_cores)
-        thread_data.instance_cpu_usage.append(scaled)
-    return
-
-
-def log_ram_usage(thread_data):
-    """System-wide RAM usage sampling."""
-    while not thread_data.stop_event.is_set():
-        used_mb = get_container_memory_usage()
-        thread_data.ram_usage.append(round(used_mb, 2))
-        time.sleep(SAMPLING_INTERVAL)
-    return
-
-
-def log_instance_ram_usage(thread_data):
-    """Per-process RAM usage sampling."""
-    pid = os.getpid()
-    proc = psutil.Process(pid)
-    while not thread_data.stop_event.is_set():
-        rss = proc.memory_info().rss / (1024 ** 2)
-        thread_data.instance_ram_usage.append(round(rss, 2))
-        time.sleep(SAMPLING_INTERVAL)
-    return
-
-
-@firebase_connected
-def setup_logs(id, set_size, domain):
     log = {
-        "id": id,
+        "id": handler_id,
+        "timestamp": timestamp,
+        "activity_code": activity_code,
+        "time": round(duration, 6),
+        "version": version,
+        "device_type": device_type,
+        "peer_device_type": peer_device_type,
+        "scheme": scheme,
+        "category": category,
+        "step": step,
+        "Avg_instance_CPU": f"{thread_data.avg_instance_cpu_usage}%",
+        "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage}MB / {profile_mem}MB",
+    }
+
+    ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/activities")
+    threading.Thread(target=_push_log_async, args=(ref, log), daemon=True).start()
+
+def get_logs(node_id: str):
+    if not default_app:
+        print("[FIREBASE] Not connected.")
+        return {}
+    ref = db.reference(f"/logs/{node_id.replace('.', '-')}/activities")
+    data = ref.get()
+    return data or {}
+
+def setup_logs(node_id: str, set_size: int, domain: str, device_type="Unknown"):
+    if not default_app:
+        print("[FIREBASE] Not connected, skipping setup log.")
+        return
+    ref = db.reference(f"/logs/{node_id.replace('.', '-')}/setup")
+    log = {
+        "id": node_id,
         "timestamp": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         "set_size": set_size,
         "domain": domain,
-        "Details": "Desktop (Flask): " + get_system_info()
+        "device_type": device_type,
+        "Details": f"{platform.platform()} - {platform.machine()}",
     }
-    ref = db.reference(f"/logs/{get_formatted_id(id)}/setup")
-    ref.push(log)
-    print(f"Log setup sent to Firebase")
+    threading.Thread(target=_push_log_async, args=(ref, log), daemon=True).start()
 
-
-@firebase_connected
-def log_result(implementation, result, version, id, device):
-    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    log = {
-        "id": id,
-        "timestamp": timestamp,
-        "implementation": implementation,
-        "result": result,
-        "device": device,
-        "version": version,
-        "Details": "Desktop (Flask): " + get_system_info()
-    }
-    if isinstance(result, list):
-        log["size"] = len(result)
-    ref = db.reference(f"/logs/{get_formatted_id(id)}/results")
-    ref.push(log)
-    print(f"Result log sent to Firebase")
-    return
-
-
-def get_formatted_id(id):
-    return id.replace(".", "-") if "[" not in id else id.replace("[", "").replace("]", "").replace(".", "-")
-
-@firebase_connected
 def aggregate_by_scheme():
-    ref = db.reference(f"/logs")
+    """
+    Aggregate logs by cryptographic scheme, computing average
+    time, CPU, and RAM per scheme across all nodes and steps.
+    This is a lightweight summary — deeper analysis belongs to Analyzer.
+    """
+    if not default_app:
+        print("[FIREBASE] Not connected.")
+        return []
+    ref = db.reference("/logs")
     all_logs = ref.get()
     if not all_logs:
-        return {}
+        return []
 
     from collections import defaultdict
     summary = defaultdict(list)
@@ -446,20 +290,36 @@ def aggregate_by_scheme():
             scheme = entry.get("scheme")
             if not scheme:
                 continue
-            summary[scheme].append(entry)
+            try:
+                cpu = float(entry.get("Avg_instance_CPU", "0").replace("%", ""))
+                ram = float(entry.get("Avg_instance_RAM", "0").split("MB")[0])
+                t = float(entry.get("time", 0))
+                device_type = entry.get("device_type", "Unknown")
+                step = entry.get("step", "Unknown")
+                summary[scheme].append({
+                    "time": t,
+                    "cpu": cpu,
+                    "ram": ram,
+                    "device_type": device_type,
+                    "step": step
+                })
+            except Exception as e:
+                print(f"[WARN] Skipping malformed entry for {scheme}: {e}")
 
     results = []
     for scheme, entries in summary.items():
         avg_time = sum(e["time"] for e in entries) / len(entries)
-        avg_cpu = sum(float(e["Avg_CPU"].split('%')[0]) for e in entries if isinstance(e["Avg_CPU"], str) and "%" in e["Avg_CPU"]) / len(entries)
-        avg_ram = sum(float(e["Avg_RAM"].split(' ')[0]) for e in entries if isinstance(e["Avg_RAM"], str)) / len(entries)
-
+        avg_cpu = sum(e["cpu"] for e in entries) / len(entries)
+        avg_ram = sum(e["ram"] for e in entries) / len(entries)
+        steps = sorted(set(e["step"] for e in entries))
+        devices = sorted(set(e["device_type"] for e in entries))
         results.append({
             "scheme": scheme,
-            "category": entries[0].get("category", "Unknown"),
             "avg_time": round(avg_time, 3),
             "avg_cpu": round(avg_cpu, 2),
             "avg_ram": round(avg_ram, 2),
+            "steps": steps,
+            "devices": devices,
             "count": len(entries)
         })
 

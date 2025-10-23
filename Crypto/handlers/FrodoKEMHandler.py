@@ -9,12 +9,14 @@ class FrodoKEMHandler(IntersectionHandler):
         self.scheme_name = scheme_name
 
     def intersection_first_step(self, device, cs):
+        self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             pubkey = {"public_key": base64.b64encode(cs.public_key).decode("utf-8")}
             self.send_message(device, None, cs.imp_name, pubkey, step="1")
             return 0, sys.getsizeof(str(pubkey))
 
     def intersection_second_step(self, device, cs, _, peer_pubkey):
+        self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
             peer_key = base64.b64decode(peer_pubkey["public_key"])
             ct, sk = cs.encapsulate(peer_key)
@@ -32,4 +34,5 @@ class FrodoKEMHandler(IntersectionHandler):
             cs.shared_key = cs.decapsulate(ciphertext)
             print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
             self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
-            return None, None
+        self.stop_persistent_logging()
+        return None, None

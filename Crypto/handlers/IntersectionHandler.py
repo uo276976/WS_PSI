@@ -1,4 +1,5 @@
 import json
+from Logs.Logs import ThreadData, start_logging, stop_logging
 
 class IntersectionHandler:
     def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):
@@ -8,6 +9,9 @@ class IntersectionHandler:
         self.devices = devices
         self.results = results
         self.device_type = device_type
+        
+        self.thread_data = None
+        self.logging_active = False
 
     def send_message(self, peer, ser_enc_res, implementation,
                  peer_pubkey=None, step=None):
@@ -64,6 +68,24 @@ class IntersectionHandler:
         except ImportError:
             print(f"[MOCK] Would send to {peer}: {json.dumps(msg, indent=2)}")
 
+    def start_persistent_logging(self):
+        if not self.logging_active:
+            self.thread_data = ThreadData()
+            start_logging(self.thread_data)
+            self.logging_active = True
+            print(f"[LOGGING] Started persistent logging for {self.id} ({self.device_type})")
+
+    def stop_persistent_logging(self):
+        if self.logging_active and self.thread_data:
+            time.sleep(0.15)
+            stop_logging(self.thread_data)
+            
+            msg = (f"[STOP_LOGGING] Stopped persistent logging for {self.id} "
+               f"({self.device_type}) | Avg CPU={self.thread_data.avg_instance_cpu_usage}% "
+               f"| Avg RAM={self.thread_data.avg_instance_ram_usage}MB")
+            print(msg, flush=True)
+            self.logging_active = False
+        
     def intersection_first_step(self, device, cs):
         raise NotImplementedError
 
