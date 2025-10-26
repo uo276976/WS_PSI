@@ -23,7 +23,7 @@ class FrodoKEMHandler(IntersectionHandler):
             if sk is None:
                 raise RuntimeError("KEM encapsulation failed")
             self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
-            print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
+            # print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
             data = base64.b64encode(ct).decode("utf-8")
             self.send_message(device, data, cs.imp_name, step="2")
             return 0, sys.getsizeof(data)
@@ -32,7 +32,8 @@ class FrodoKEMHandler(IntersectionHandler):
         with with_log_context(self, cs, "FINAL_STEP", device):
             ciphertext = base64.b64decode(peer_data)
             cs.shared_key = cs.decapsulate(ciphertext)
-            print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
+            # print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
+            
             self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
         self.stop_persistent_logging()
         return None, None

@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 import oqs
 
-# ---------- PQ KEM base ----------
+# PQ KEM base
 class PQKEMHelper:
     """Thin wrapper around liboqs KeyEncapsulation."""
     def __init__(self, alg_name: str):
@@ -21,10 +21,10 @@ class PQKEMHelper:
     def serialize_public_key(self) -> str:
         return self.public_key
 
-    def decode_public_key(self, pub_input: Union[str, dict]) -> str:
+    def decode_public_key(self, pub_input):
         if isinstance(pub_input, dict):
-            return pub_input.get("public_key") or ""
-        return pub_input
+            pub_input = pub_input.get("public_key", "")
+        return base64.b64decode(pub_input) if isinstance(pub_input, str) else pub_input
 
     def encapsulate(self, peer_public_b64: Union[str, bytes]):
         if isinstance(peer_public_b64, str):
@@ -77,7 +77,7 @@ class HQCHelper(PQKEMHelper):
             self.ciphertext = None
 
 
-# ---------- P-256 (ECDH) ----------
+# P-256
 class P256Helper:
     def __init__(self):
         self.imp_name = "P-256"
@@ -137,9 +137,9 @@ class KyberHelper:
         self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
         self.ciphertext = None
         self.shared_key = None
-        print("[Kyber] Key pair generated")
+        # print("[Kyber] Key pair generated")
 
-    # --- Public key ---
+    # Public key
 
     def serialize_public_key(self) -> str:
         return self.public_key
@@ -153,14 +153,14 @@ class KyberHelper:
             return base64.b64decode(pk_b64)
         return base64.b64decode(peer_pubkey_b64_or_bytes)
 
-    # --- KEM operations ---
+    # KEM operations
 
     def encapsulate(self, peer_pubkey_b64_or_bytes):
         peer_pub_bytes = self._to_pub_bytes(peer_pubkey_b64_or_bytes)
         ct, ss = self.kem.encap_secret(peer_pub_bytes)   # both bytes
         self.ciphertext = ct
         self.shared_key = ss
-        print(f"[Kyber] Encapsulation done. Shared key: {ss.hex()}")
+        # print(f"[Kyber] Encapsulation done. Shared key: {ss.hex()}")
         return ct, ss
 
     def decapsulate(self, ct_b64_or_bytes):
@@ -170,8 +170,8 @@ class KyberHelper:
             ct_bytes = base64.b64decode(ct_b64_or_bytes["pq"])
         else:
             ct_bytes = base64.b64decode(ct_b64_or_bytes)
-        shared_key = self.kem.decap_secret(ct_bytes)     # bytes
-        return shared_key
+        self.shared_key = self.kem.decap_secret(ct_bytes)
+        return self.shared_key
     
     def reconstruct_public_key(self, peer_pubkey_b64: str) -> bytes:
         if isinstance(peer_pubkey_b64, dict):
@@ -181,14 +181,14 @@ class KyberHelper:
     def compute_shared_key(self, peer_pubkey_bytes: bytes):
         # Bob calls this
         self.ciphertext, self.shared_key = self.kem.encap_secret(peer_pubkey_bytes)
-        print("[Kyber] Shared key encapsulated")
+        # print("[Kyber] Shared key encapsulated")
 
     def decapsulate_shared_key(self, ciphertext: bytes):
         # Alice calls this
         self.shared_key = self.kem.decap_secret(ciphertext)
-        print("[Kyber] Shared key decapsulated")
+        # print("[Kyber] Shared key decapsulated")
 
-    # --- Ciphertext helpers ---
+    # Ciphertext helpers
 
     def get_ciphertext(self) -> str:
         if self.ciphertext is None:
@@ -252,7 +252,7 @@ class X25519Helper:
         return ss
 
 
-# ---------- Híbrido (Kyber + X25519) ----------
+# Híbrido (Kyber + X25519)
 class HybridKyberX25519Helper:
     """
     Hybrid KEM: Kyber512 + X25519
@@ -277,7 +277,7 @@ class HybridKyberX25519Helper:
         self._last_ciphertext = None  # dict
         self._last_shared_key = None  # bytes
 
-    # ---- public key I/O ----
+    # public key I/O
 
     def serialize_public_key(self):
         # Always returns the {pq, xc} dict with b64 strings
@@ -293,7 +293,7 @@ class HybridKyberX25519Helper:
         # Otherwise let the handler provide the right format in step 2
         return d
 
-    # ---- KEM ops ----
+    # KEM ops
 
     def encapsulate(self, peer_pubkeys: dict):
         if not isinstance(peer_pubkeys, dict) or "pq" not in peer_pubkeys or "xc" not in peer_pubkeys:
@@ -307,7 +307,7 @@ class HybridKyberX25519Helper:
 
         # Combine with HKDF-SHA256 → 32 bytes
         combo = ss1 + ss2
-        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"hybrid-nike-v1")
+        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"", info=b"hybrid-nike-v1")
         sk = hkdf.derive(combo)
 
         ct = {

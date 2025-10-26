@@ -1,18 +1,25 @@
 import unittest
 import json
 from Crypto.handlers.PQCKEMHandlers import KEMHandler
-from Crypto.handlers.DHHandler import DHHandler
+from Crypto.handlers.DiffieHellmanHandler import DiffieHellmanHandler
 from Crypto.handlers.KyberHandler import KyberHandler
 from Crypto.handlers.FrodoKEMHandler import FrodoKEMHandler
 from Crypto.handlers.ClassicMcElieceHandler import ClassicMcElieceHandler
+from Crypto.handlers.P384Handler import P384Handler
+from Crypto.handlers.Secp256k1Handler import Secp256k1Handler
+from Crypto.handlers.X448Handler import X448Handler
+from Crypto.handlers.RSAHandler import RSAHandler
 
 from Crypto.helpers.PQCKEMHelpers import (
     KyberHelper, NTRUHelper, BIKEHelper, HQCHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
 )
-
 from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
 from Crypto.helpers.ClassicMcElieceHelper import ClassicMcElieceHelper
-from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper
+from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper, DiffieHellman8192Helper
+from Crypto.helpers.P384Helper import P384Helper
+from Crypto.helpers.Secp256k1Helper import Secp256k1Helper
+from Crypto.helpers.X448Helper import X448Helper
+from Crypto.helpers.RSAHelper import RSAHelper
 
 class NikeTests(unittest.TestCase):
 
@@ -21,8 +28,8 @@ class NikeTests(unittest.TestCase):
         alice = helper_cls()
         bob = helper_cls()
 
-        handler_a = handler_cls("Alice", {}, "domain", {}, {}, scheme_name)
-        handler_b = handler_cls("Bob", {}, "domain", {}, {}, scheme_name)
+        handler_a = handler_cls("Alice", {}, "domain", {}, {}, device_type="TEST")
+        handler_b = handler_cls("Bob", {}, "domain", {}, {}, device_type="TEST")
 
         # Step 1: Alice envía su pubkey
         _, _ = handler_a.intersection_first_step("Bob", alice)
@@ -39,19 +46,24 @@ class NikeTests(unittest.TestCase):
         handler_a.intersection_final_step("Bob", alice, ct)
 
         # Bob también termina (para algunos esquemas)
-        if isinstance(handler_b, (DHHandler, KyberHandler)):
+        if isinstance(handler_b, (DiffieHellmanHandler, KyberHandler)):
             handler_b.intersection_final_step("Alice", bob, pub_a if not hasattr(bob, "get_ciphertext") else ct)
 
         # Validamos que ambos resultados contengan shared key
-        self.assertTrue(any("SharedKey" in k for k in handler_a.results))
-        self.assertTrue(any("SharedKey" in k for k in handler_b.results))
+        self.assertTrue(handler_a.results, "Alice has no results")
+        self.assertTrue(handler_b.results, "Bob has no results")
+        self.assertTrue(any("SharedKey" in key for key in handler_a.results.keys()))
+        self.assertTrue(any("SharedKey" in key for key in handler_b.results.keys()))
 
         k_a = list(handler_a.results.values())[0]
         k_b = list(handler_b.results.values())[0]
         self.assertEqual(k_a, k_b)
 
     def test_dh(self):
-        self.run_protocol(DHHandler, DiffieHellmanHelper, "DH")
+        self.run_protocol(DiffieHellmanHandler, DiffieHellmanHelper, "Diffie-Hellman")
+        
+    def test_dh8192(self):
+        self.run_protocol(DiffieHellmanHandler, DiffieHellman8192Helper, "Diffie-Hellman-8192")
 
     def test_kyber(self):
         self.run_protocol(KyberHandler, KyberHelper, "Kyber")
@@ -73,9 +85,21 @@ class NikeTests(unittest.TestCase):
 
     def test_p256(self):
         self.run_protocol(KEMHandler, P256Helper, "P256")
+    
+    def test_p384(self):
+        self.run_protocol(P384Handler, P384Helper, "P384")
 
     def test_x25519(self):
         self.run_protocol(KEMHandler, X25519Helper, "X25519")
+        
+    def test_x448(self):
+        self.run_protocol(X448Handler, X448Helper, "X448")
+    
+    def test_secp256k1(self):
+        self.run_protocol(Secp256k1Handler, Secp256k1Helper, "Secp256k1")
+        
+    def test_rsa(self):
+        self.run_protocol(RSAHandler, RSAHelper, "RSA")
 
     def test_hybrid_kyber_x25519(self):
         self.run_protocol(KEMHandler, HybridKyberX25519Helper, "HybridKyberX25519")

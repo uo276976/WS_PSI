@@ -12,9 +12,6 @@ DEVICE_ORDER = ["IoT", "Android", "WS"]
 DEVICE_COLORS = {"IoT": "#2ca02c", "Android": "#ff7f0e", "WS": "#1f77b4"}  # verde, naranja, azul
 LINKS_ORDER = [f"{a} → {b}" for a in DEVICE_ORDER for b in DEVICE_ORDER]
 
-# -----------------------
-# Helpers
-# -----------------------
 
 def parse_cpu(val):
     if isinstance(val, str):
@@ -55,6 +52,9 @@ def _collect_rows(node_json):
                 "time": float(a.get("time", 0.0)),
                 "cpu": parse_cpu(a.get("Avg_instance_CPU")),
                 "ram": parse_ram_fraction(a.get("Avg_instance_RAM")),
+                "peak_cpu": parse_cpu(a.get("Peak_instance_CPU", 0.0)),
+                "peak_ram": parse_ram_fraction(a.get("Peak_instance_RAM", "0MB / 1MB")),
+                "timestamp": a.get("timestamp", None)
             })
         except Exception:
             continue
@@ -75,9 +75,6 @@ def load_all_logs(in_dir):
             continue
     return pd.DataFrame(all_rows)
 
-# -----------------------
-# Analyzer
-# -----------------------
 
 def analyze_dir(in_dir):
     df = load_all_logs(in_dir)
@@ -87,10 +84,11 @@ def analyze_dir(in_dir):
 
     out_dir = os.path.join(in_dir, "analysis")
     os.makedirs(out_dir, exist_ok=True)
+    
+    if "timestamp" in df.columns and df["timestamp"].notna().any():
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
-    # ==============================================================
     # HEATMAPS GLOBALES
-    # ==============================================================
     df["link"] = df["device_type"] + " → " + df["peer_device_type"]
 
     heat = (
@@ -116,33 +114,38 @@ def analyze_dir(in_dir):
                 .astype(float)
         )
         plt.figure(figsize=(14, 6))
-        sns.heatmap(
-            grid, annot=True, fmt=".3f", cmap=cmap,
+        ax = sns.heatmap(
+            grid,
+            annot=True, fmt=".3f", cmap=cmap,
             cbar_kws={"label": title},
-            linewidths=0.5, linecolor="white"
+            linewidths=1.0, linecolor="gray"
         )
         plt.title(f"{title} por combinación de dispositivos", fontsize=13)
         plt.xlabel("Combinación de dispositivos")
         plt.ylabel("Algoritmo / Esquema")
         plt.xticks(rotation=45, ha="right")
+
+        ax.yaxis.set_minor_locator(plt.MultipleLocator(1))
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, f"global_{metric}_heatmap.png"))
         plt.close()
 
-    # ==============================================================
     # HISTOGRAMAS COMBINADOS POR DEVICE
-    # ==============================================================
     dev_summary = (
         df.groupby(["scheme", "device_type"])
           .agg(time=("time", "mean"),
                cpu=("cpu", "mean"),
-               ram=("ram", "mean"))
+               ram=("ram", "mean"),
+               peak_cpu=("peak_cpu", "max"),
+               peak_ram=("peak_ram", "max"))
           .reset_index()
     )
 
-    for metric, (title, palette) in metrics_cfg.items():
+    for metric, (title, _) in metrics_cfg.items():
         plt.figure(figsize=(14, 6))
-        sns.barplot(
+        ax = sns.barplot(
             data=dev_summary,
             x="scheme", y=metric,
             hue="device_type",
@@ -150,26 +153,191 @@ def analyze_dir(in_dir):
             palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
             errorbar=None
         )
+
         plt.title(f"{title} promedio por esquema y tipo de dispositivo")
         plt.xlabel("Algoritmo / Esquema")
         plt.ylabel(title)
         plt.xticks(rotation=45, ha="right")
-        plt.legend(title="Tipo de dispositivo")
+
+        plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
+
+        ax.yaxis.set_minor_locator(plt.MultipleLocator(5))
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.5, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"global_{metric}_by_device.png"))
+        plt.close()
+    
+    unique_schemes = sorted(df["scheme"].unique())
+    for scheme in unique_schemes:
+        subset = dev_summary[dev_summary["scheme"] == scheme]
+        plt.figure(figsize=(7, 5))
+        ax = sns.barplot(
+            data=subset,
+            x="device_type", y="time",
+            hue="device_type",
+            legend=False,
+            order=DEVICE_ORDER,
+            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+            errorbar=None
+        )
+        plt.title(f"Tiempo promedio del esquema {scheme} por dispositivo")
+        plt.xlabel("Tipo de dispositivo")
+        plt.ylabel("Tiempo promedio (s)")
+
+        ax.yaxis.set_minor_locator(plt.MultipleLocator(0.01))
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"{scheme}_by_device_time.png"))
+        plt.close()
+        
+    for metric, label in [
+        ("peak_cpu", "Pico máximo de CPU (%)"),
+        ("peak_ram", "Pico máximo de RAM (fracción usada)")
+    ]:
+        plt.figure(figsize=(14, 6))
+        ax = sns.barplot(
+            data=dev_summary,
+            x="scheme", y=metric,
+            hue="device_type",
+            hue_order=DEVICE_ORDER,
+            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+            errorbar=None
+        )
+        plt.title(f"{label} por esquema y tipo de dispositivo")
+        plt.xlabel("Algoritmo / Esquema")
+        plt.ylabel(label)
+        plt.xticks(rotation=45, ha="right")
+        plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
+
+        # Grid y líneas menores según métrica
+        if metric == "peak_cpu":
+            ax.yaxis.set_minor_locator(plt.MultipleLocator(5))
+        else:  # peak_ram (fracción 0..1)
+            ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
+            plt.ylim(0, 1)
+
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":",  linewidth=0.4, alpha=0.3)
+
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, f"global_{metric}_by_device.png"))
         plt.close()
 
-    # ==============================================================
-    # RESUMEN GLOBAL COMPARATIVO POR DEVICE (una gráfica por métrica)
-    # ==============================================================
+        
+    # Comparativa promedio vs pico de CPU por dispositivo
+    for device in DEVICE_ORDER:
+        subset = dev_summary[dev_summary["device_type"] == device]
+        plt.figure(figsize=(8, 5))
+        width = 0.35
+        x = np.arange(len(subset["scheme"]))
+        plt.bar(x - width/2, subset["cpu"], width, label="CPU promedio", color="#4C72B0")
+        plt.bar(x + width/2, subset["peak_cpu"], width, label="CPU pico", color="#DD8452")
+        plt.xticks(x, subset["scheme"], rotation=45, ha="right")
+        plt.title(f"CPU promedio vs pico - {device}")
+        plt.ylabel("Uso de CPU (%)")
+        plt.legend(frameon=True)
 
+        plt.grid(axis="y", which="major", linestyle="--", linewidth=0.8, alpha=0.6)
+        plt.grid(axis="y", which="minor", linestyle=":", linewidth=0.4, alpha=0.3)
+        plt.gca().yaxis.set_minor_locator(plt.MultipleLocator(5))
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"{device}_cpu_avg_vs_peak.png"))
+        plt.close()
+
+
+    # TRAZAS TEMPORALES
+    if "timestamp" in df.columns and df["timestamp"].notna().any():
+        trace_dir = os.path.join(out_dir, "temporal_traces")
+        os.makedirs(trace_dir, exist_ok=True)
+
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df = df.sort_values("timestamp")
+
+        palette = {d: DEVICE_COLORS[d] for d in DEVICE_ORDER}
+
+        for scheme in sorted(df["scheme"].unique()):
+            subset_scheme = df[df["scheme"] == scheme]
+            if subset_scheme.empty:
+                continue
+
+            # CPU trace
+            plt.figure(figsize=(12, 6))
+            ax = sns.lineplot(
+                data=subset_scheme,
+                x="timestamp",
+                y="cpu",
+                hue="device_type",
+                hue_order=DEVICE_ORDER,
+                palette=palette,
+                linewidth=1.6
+            )
+            plt.title(f"Evolución temporal del uso de CPU — {scheme}")
+            plt.xlabel("Tiempo")
+            plt.ylabel("CPU promedio (%)")
+            plt.legend(title="Dispositivo", loc="best", frameon=True)
+
+            ax.yaxis.set_minor_locator(plt.MultipleLocator(5))
+            ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+            ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+            ax.grid(which="major", axis="x", linestyle=":", linewidth=0.4, alpha=0.3)
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(trace_dir, f"{scheme}_cpu_trace.png"))
+            plt.close()
+
+            # RAM trace
+            plt.figure(figsize=(12, 6))
+            ax = sns.lineplot(
+                data=subset_scheme,
+                x="timestamp",
+                y="ram",
+                hue="device_type",
+                hue_order=DEVICE_ORDER,
+                palette=palette,
+                linewidth=1.6
+            )
+            plt.title(f"Evolución temporal del uso de RAM — {scheme}")
+            plt.xlabel("Tiempo")
+            plt.ylabel("RAM (fracción usada)")
+            plt.legend(title="Dispositivo", loc="best", frameon=True)
+
+            ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
+            ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+            ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+            ax.grid(which="major", axis="x", linestyle=":", linewidth=0.4, alpha=0.3)
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(trace_dir, f"{scheme}_ram_trace.png"))
+            plt.close()
+
+        print(f"[OK] Trazas temporales generadas en {trace_dir}")
+
+    # RESUMEN GLOBAL COMPARATIVO POR DEVICE
     global_summary = (
         df.groupby("device_type")
-          .agg(avg_time=("time", "mean"),
-               avg_cpu=("cpu", "mean"),
-               avg_ram=("ram", "mean"))
-          .reindex(DEVICE_ORDER)
-          .reset_index()
+        .agg(avg_time=("time", "mean"),
+            avg_cpu=("cpu", "mean"),
+            avg_ram=("ram", "mean"))
+        .reindex(DEVICE_ORDER)
+        .reset_index()
+    )
+
+    by_device_by_scheme = (
+        df.groupby(["device_type", "scheme"])
+        .agg(
+            avg_time=("time", "mean"),
+            avg_cpu=("cpu", "mean"),
+            avg_ram=("ram", "mean"),
+            samples=("time", "count")
+        )
+        .reset_index()
+        .sort_values(["device_type", "avg_time"])
+        .to_dict(orient="records")
     )
 
     global_means = {
@@ -181,73 +349,29 @@ def analyze_dir(in_dir):
         "schemes": df["scheme"].nunique()
     }
 
-    with open(os.path.join(out_dir, "global_summary.json"), "w") as f:
-        json.dump({
-            "overall": global_means,
-            "by_device": global_summary.to_dict(orient="records")
-        }, f, indent=2)
+    output_data = {
+        "overall": global_means,
+        "by_device": global_summary.to_dict(orient="records"),
+        "by_device_by_scheme": by_device_by_scheme
+    }
 
-    # --- Tiempo promedio por dispositivo ---
-    plt.figure(figsize=(7, 5))
-    sns.barplot(
-        data=global_summary,
-        x="device_type", y="avg_time",
-        order=DEVICE_ORDER,
-        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
-        errorbar=None
-    )
-    plt.title("Tiempo promedio por tipo de dispositivo (s)")
-    plt.xlabel("Tipo de dispositivo")
-    plt.ylabel("Tiempo promedio (s)")
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "global_summary_time.png"))
-    plt.close()
+    out_json = os.path.join(out_dir, "global_summary.json")
+    with open(out_json, "w") as f:
+        json.dump(output_data, f, indent=2)
 
-    # --- CPU promedio por dispositivo ---
-    plt.figure(figsize=(7, 5))
-    sns.barplot(
-        data=global_summary,
-        x="device_type", y="avg_cpu",
-        order=DEVICE_ORDER,
-        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
-        errorbar=None
-    )
-    plt.title("CPU promedio por tipo de dispositivo (%)")
-    plt.xlabel("Tipo de dispositivo")
-    plt.ylabel("CPU promedio (%)")
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "global_summary_cpu.png"))
-    plt.close()
+    print(f"[OK] Resumen global exportado a {out_json}")
 
-    # --- RAM promedio por dispositivo ---
-    plt.figure(figsize=(7, 5))
-    sns.barplot(
-        data=global_summary,
-        x="device_type", y="avg_ram",
-        order=DEVICE_ORDER,
-        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
-        errorbar=None
-    )
-    plt.title("RAM promedio por tipo de dispositivo (fracción usada)")
-    plt.xlabel("Tipo de dispositivo")
-    plt.ylabel("RAM promedio (fracción usada)")
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "global_summary_ram.png"))
-    plt.close()
-
-    # ==============================================================
-    # RENDIMIENTO GLOBAL COMBINADO
-    # ==============================================================
-    # Promedios por device
     perf_df = (
         df.groupby("device_type")
-          .agg(avg_time=("time", "mean"),
-               avg_cpu=("cpu", "mean"),
-               avg_ram=("ram", "mean"))
-          .reset_index()
+        .agg(
+            avg_time=("time", "mean"),
+            avg_cpu=("cpu", "mean"),
+            avg_ram=("ram", "mean")
+        )
+        .reset_index()
     )
 
-    # Normalización y cálculo de índice
+    # Normalización y cálculo de índice 
     max_time = perf_df["avg_time"].max() or 1
     perf_df["norm_time"] = 1 - (perf_df["avg_time"] / max_time)
     perf_df["norm_cpu"] = 1 - (perf_df["avg_cpu"] / 100)
@@ -257,20 +381,118 @@ def analyze_dir(in_dir):
         0.6 * perf_df["norm_time"] + 0.2 * perf_df["norm_cpu"] + 0.2 * perf_df["norm_ram"]
     )
 
-    plt.figure(figsize=(8, 5))
-    sns.barplot(
-        data=perf_df,
-        x="device_type", y="performance_index",
-        palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
-        order=DEVICE_ORDER
+    # Función genérica para todas las barras resumidas
+    def plot_device_summary(df, ycol, title, ylabel, filename, step=5, ylim=None):
+        plt.figure(figsize=(7, 5))
+        ax = sns.barplot(
+            data=df,
+            x="device_type", y=ycol,
+            hue="device_type",
+            hue_order=DEVICE_ORDER,
+            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+            errorbar=None
+        )
+        plt.title(title)
+        plt.xlabel("Tipo de dispositivo")
+        plt.ylabel(ylabel)
+        plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
+
+        # Ejes y rejilla
+        if ylim:
+            plt.ylim(ylim)
+        ax.yaxis.set_minor_locator(plt.MultipleLocator(step))
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, filename))
+        plt.close()
+
+    # Llamadas a la función
+    plot_device_summary(
+        global_summary, "avg_time",
+        "Tiempo promedio por tipo de dispositivo (s)",
+        "Tiempo promedio (s)",
+        "global_summary_time.png", step=0.01
     )
-    plt.title("Índice de rendimiento general (Tiempo + CPU + RAM)")
-    plt.ylabel("Puntuación normalizada (0–1, más alto es mejor)")
-    plt.xlabel("Tipo de dispositivo")
-    plt.ylim(0, 1)
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "global_performance_index.png"))
-    plt.close()
+
+    plot_device_summary(
+        global_summary, "avg_cpu",
+        "CPU promedio por tipo de dispositivo (%)",
+        "CPU promedio (%)",
+        "global_summary_cpu.png", step=5
+    )
+
+    plot_device_summary(
+        global_summary, "avg_ram",
+        "RAM promedio por tipo de dispositivo (fracción usada)",
+        "RAM promedio (fracción usada)",
+        "global_summary_ram.png", step=0.05, ylim=(0, 1)
+    )
+
+    plot_device_summary(
+        perf_df, "performance_index",
+        "Índice de rendimiento general (Tiempo + CPU + RAM)",
+        "Puntuación normalizada (0–1, más alto es mejor)",
+        "global_performance_index.png", step=0.1, ylim=(0, 1)
+    )
+
+    # Evaluación automática de viabilidad
+    suitability_rules = {
+        "IoT": {
+            "time": 0.5,
+            "cpu": 65,
+            "ram": 0.80
+        },
+
+        "Android": {
+            "time": 0.2,
+            "cpu": 80,
+            "ram": 0.30
+        },
+
+        "WS": {
+            "time": 0.1,
+            "cpu": 90,
+            "ram": 0.70
+        }
+    }
+
+    by_device_scheme_df = pd.DataFrame(by_device_by_scheme)
+
+    def assess(row):
+        """Evalúa si un esquema es viable en un dispositivo."""
+        limits = suitability_rules.get(row["device_type"], {})
+        reasons = []
+        ok = True
+
+        if "time" in limits:
+            if row["avg_time"] > limits["time"]:
+                ok = False
+                reasons.append(f"Tiempo {row['avg_time']:.3f}s > {limits['time']}s")
+
+        if "cpu" in limits:
+            if row["avg_cpu"] > limits["cpu"]:
+                ok = False
+                reasons.append(f"CPU {row['avg_cpu']:.1f}% > {limits['cpu']}%")
+
+        if "ram" in limits:
+            if row["avg_ram"] > limits["ram"]:
+                ok = False
+                reasons.append(f"RAM {row['avg_ram']:.2f} > {limits['ram']}")
+
+        verdict = "Viable" if ok else "No viable"
+        reason = "; ".join(reasons) if reasons else "Dentro de umbrales esperados"
+        return pd.Series({"verdict": verdict, "reason": reason})
+
+    suitability_df = by_device_scheme_df.join(by_device_scheme_df.apply(assess, axis=1))
+    suitability_out = os.path.join(out_dir, "suitability_table.json")
+    suitability_df.to_json(suitability_out, orient="records", indent=2)
+
+    suitability_csv = os.path.join(out_dir, "suitability_table.csv")
+    suitability_df.to_csv(suitability_csv, index=False)
+
+    print(f"[OK] Suitability table generada → {suitability_out}")
 
     print(f"[OK] Análisis completado → {out_dir}")
     print(f"[Resumen global]: {json.dumps(global_means, indent=2)}")

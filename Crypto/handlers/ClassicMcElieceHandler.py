@@ -16,7 +16,7 @@ class ClassicMcElieceHandler(IntersectionHandler):
             pubkey_b64 = cs.serialize_public_key()
             size = sys.getsizeof(pubkey_b64)
 
-            print(f"[DEBUG][{self.scheme_name}] Sending public key to {device}: {pubkey_b64[:32]}...")
+            # print(f"[DEBUG][{self.scheme_name}] Sending public key to {device}: {pubkey_b64[:32]}...")
             self.send_message(device, None, cs.imp_name, peer_pubkey=pubkey_b64, step="1")
 
             return 0, size
@@ -30,7 +30,7 @@ class ClassicMcElieceHandler(IntersectionHandler):
             hexkey = cs.shared_key.hex()
 
             self.results[f"{device} ClassicMcEliece SharedKey"] = hexkey
-            print(f"[{self.scheme_name}] Shared key computed with {device}: {hexkey}")
+            # print(f"[{self.scheme_name}] Shared key computed with {device}: {hexkey}")
 
             ciphertext_b64 = cs.get_ciphertext()
             size = sys.getsizeof(ciphertext_b64)
@@ -40,12 +40,11 @@ class ClassicMcElieceHandler(IntersectionHandler):
 
     def intersection_final_step(self, device, cs, peer_data):
         with with_log_context(self, cs, "FINAL_STEP", device):
-            cs.set_ciphertext(peer_data)
-            cs.decapsulate_shared_key(cs.ciphertext)
+            cs.decapsulate_shared_key(peer_data)
             derived_key_hex = cs.shared_key.hex()
 
             self.results[f"{device} ClassicMcEliece SharedKey"] = derived_key_hex
-            print(f"[{self.scheme_name}] Shared key established with {device}: {derived_key_hex}")
+            # print(f"[{self.scheme_name}] Shared key established with {device}: {derived_key_hex}")
 
         self.stop_persistent_logging()
         return None, None

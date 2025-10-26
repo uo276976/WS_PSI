@@ -1,6 +1,9 @@
 import time, threading, os, psutil
 from contextlib import contextmanager
-from Logs.Logs import get_container_limits, log_activity_to_firebase, ThreadData
+from Logs.Logs import (
+    get_container_limits, log_activity_to_firebase, ThreadData, SAMPLING_INTERVAL,
+    start_logging, stop_logging, _aggregate_stats
+)
 from Network.collections.DbConstants import VERSION
 
 
@@ -10,22 +13,23 @@ def with_log_context(handler, cs, step_name, device=None):
     cpu_cores = get_container_limits().get("cpu_cores", psutil.cpu_count())
 
     try:
-        proc.cpu_percent(None)
+        proc.cpu_percent(None)  # warm-up
     except Exception:
         pass
 
     cpu_before = proc.cpu_times()
-    mem_before = proc.memory_info().rss
     start_time = time.perf_counter()
 
-    td = handler.thread_data if getattr(handler, "logging_active", False) else ThreadData()
+    ephemeral = not getattr(handler, "logging_active", False)
+    td = handler.thread_data if not ephemeral else ThreadData()
+    if ephemeral:
+        start_logging(td)
 
     try:
         yield td
     finally:
         duration = time.perf_counter() - start_time
         cpu_after = proc.cpu_times()
-        mem_after = proc.memory_info().rss
 
         user_cpu = cpu_after.user - cpu_before.user
         system_cpu = cpu_after.system - cpu_before.system
@@ -39,45 +43,64 @@ def with_log_context(handler, cs, step_name, device=None):
         except Exception:
             sampled = 0.0
 
-        if duration < 0.05:
-            cpu_percent_est = sampled
-        else:
-            cpu_percent_est = 0.5 * est_by_times + 0.5 * sampled
+        cpu_percent_est = sampled if duration < 0.05 else (0.5 * est_by_times + 0.5 * sampled)
 
         cpu_percent_est = max(0.0, min(cpu_percent_est, 100.0))
         epsilon = 0.2
-        if 0.0 < cpu_percent_est < epsilon:
-            cpu_percent_est = epsilon
-        if 100.0 - epsilon < cpu_percent_est < 100.0:
-            cpu_percent_est = 100.0 - epsilon
+        if 0.0 < cpu_percent_est < epsilon: cpu_percent_est = epsilon
+        if 100.0 - epsilon < cpu_percent_est < 100.0: cpu_percent_est = 100.0 - epsilon
 
         ram_usage_mb = round(proc.memory_info().rss / (1024**2), 2)
 
-        if not getattr(handler, "logging_active", False) or not handler.thread_data:
-            td.avg_instance_cpu_usage = round(cpu_percent_est, 2)
-            td.avg_instance_ram_usage = ram_usage_mb
-        else:
-            td.avg_instance_cpu_usage = round(cpu_percent_est, 2)
-            td.avg_instance_ram_usage = ram_usage_mb
+        if ephemeral:
+            if not td.instance_cpu_usage and not td.instance_ram_usage:
+                try:
+                    _ = proc.cpu_percent(interval=SAMPLING_INTERVAL)
+                except Exception:
+                    pass
+                td.instance_cpu_usage.append(cpu_percent_est)
+                td.instance_ram_usage.append(ram_usage_mb)
+                td.timestamps.append(time.time())
 
-        td_snapshot = type("TD", (), vars(td).copy())() if td is not None else ThreadData()
+            stop_logging(td)
+        else:
+            _aggregate_stats(td)
+
+        td.avg_instance_cpu_usage = round(
+            0.7 * getattr(td, "avg_instance_cpu_usage", 0.0) + 0.3 * cpu_percent_est, 2
+        )
+        td.avg_instance_ram_usage = round(
+            0.7 * getattr(td, "avg_instance_ram_usage", 0.0) + 0.3 * ram_usage_mb, 2
+        )
+
+        td_snapshot = type("TD", (), vars(td).copy())()
+
         peer_type = (
             handler.devices.get(device, {}).get("device_type", "Unknown")
             if hasattr(handler, "devices") and device in handler.devices else "Unknown"
         )
+        scheme_name = getattr(cs, "imp_name", "Unknown")
+        category = getattr(cs, "category", None)
+        if not category or category == "Unknown":
+            name_upper = scheme_name.upper()
+            if "OPE" in name_upper and "CA" in name_upper: category = "PSI-CA"
+            elif "OPE" in name_upper: category = "OPE"
+            elif "DOMAIN" in name_upper: category = "PSI-Domain"
+            elif "PSI" in name_upper: category = "PSI"
+            else: category = "NIKE"
 
         threading.Thread(
             target=log_activity_to_firebase,
             args=(
                 td_snapshot,
-                f"INTERSECTION_{step_name}_{cs.imp_name}",
+                f"INTERSECTION_{step_name}_{scheme_name}",
                 round(duration, 6),
                 VERSION,
                 handler.id,
                 getattr(handler, "device_type", "Unknown"),
                 peer_type,
-                cs.imp_name,
-                getattr(cs, "category", "NIKE"),
+                scheme_name,
+                category,
                 step_name,
                 device,
             ),

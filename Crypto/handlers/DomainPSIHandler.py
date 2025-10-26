@@ -7,7 +7,8 @@ from Logs.LogContext import with_log_context
 class DomainPSIHandler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):
         super().__init__(id, my_data, domain, devices, results, device_type)
-
+        self.category = "PSI-Domain"
+        
     def intersection_first_step(self, device, cs):
         with with_log_context(self, cs, "FIRST_STEP", device):
             encrypted_data = cs.encrypt_my_data(self.my_data, self.domain)

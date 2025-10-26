@@ -1,7 +1,16 @@
+version: "3.9"
+
+x-build: &default-build
+  context: .
+  dockerfile: Dockerfile
+
 services:
   # Workstation nodes
   node-1:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ws-psi:latest
     container_name: ws-psi-node-1
     ports:
       - "5002:5000"
@@ -12,18 +21,15 @@ services:
       - DEVICE_TYPE=WS
       - CPU_CORES=1
       - MEMORY_MB=2048
-      - LD_LIBRARY_PATH=/opt/oqs/lib
-      - OQS_INSTALL_PATH=/opt/oqs
-      - BENCHMARK_MODE=false
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
     cpus: 1.0
     mem_limit: 2g
-    memswap_limit: 2g
 
   node-2:
-    build: .
+    image: ws-psi:latest
     container_name: ws-psi-node-2
     ports:
       - "5003:5000"
@@ -34,19 +40,16 @@ services:
       - DEVICE_TYPE=WS
       - CPU_CORES=1
       - MEMORY_MB=2048
-      - LD_LIBRARY_PATH=/opt/oqs/lib
-      - OQS_INSTALL_PATH=/opt/oqs
-      - BENCHMARK_MODE=false
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
     cpus: 1.0
     mem_limit: 2g
-    memswap_limit: 2g
 
   # IoT nodes
   node-3:
-    build: .
+    image: ws-psi:latest
     container_name: ws-psi-node-3
     ports:
       - "5004:5000"
@@ -57,18 +60,15 @@ services:
       - DEVICE_TYPE=IoT
       - CPU_CORES=0.125
       - MEMORY_MB=256
-      - LD_LIBRARY_PATH=/opt/oqs/lib
-      - OQS_INSTALL_PATH=/opt/oqs
-      - BENCHMARK_MODE=false
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
     cpus: 0.125
     mem_limit: 256m
-    memswap_limit: 256m
 
   node-4:
-    build: .
+    image: ws-psi:latest
     container_name: ws-psi-node-4
     ports:
       - "5005:5000"
@@ -79,19 +79,16 @@ services:
       - DEVICE_TYPE=IoT
       - CPU_CORES=0.125
       - MEMORY_MB=256
-      - LD_LIBRARY_PATH=/opt/oqs/lib
-      - OQS_INSTALL_PATH=/opt/oqs
-      - BENCHMARK_MODE=false
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
     cpus: 0.125
     mem_limit: 256m
-    memswap_limit: 256m
 
   # Android nodes
   node-5:
-    build: .
+    image: ws-psi:latest
     container_name: ws-psi-node-5
     ports:
       - "5006:5000"
@@ -102,18 +99,15 @@ services:
       - DEVICE_TYPE=Android
       - CPU_CORES=0.5
       - MEMORY_MB=1024
-      - LD_LIBRARY_PATH=/opt/oqs/lib
-      - OQS_INSTALL_PATH=/opt/oqs
-      - BENCHMARK_MODE=false
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
     cpus: 0.5
     mem_limit: 1g
-    memswap_limit: 1g
 
   node-6:
-    build: .
+    image: ws-psi:latest
     container_name: ws-psi-node-6
     ports:
       - "5007:5000"
@@ -124,15 +118,12 @@ services:
       - DEVICE_TYPE=Android
       - CPU_CORES=0.5
       - MEMORY_MB=1024
-      - LD_LIBRARY_PATH=/opt/oqs/lib
-      - OQS_INSTALL_PATH=/opt/oqs
-      - BENCHMARK_MODE=false
+      - BENCHMARK_MODE=true
     volumes:
       - ./FirebaseCredentials.json:/app/FirebaseCredentials.json
     restart: unless-stopped
     cpus: 0.5
     mem_limit: 1g
-    memswap_limit: 1g
 
 networks:
   container_network: {}

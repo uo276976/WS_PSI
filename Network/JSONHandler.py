@@ -4,18 +4,28 @@ import time
 from Crypto.handlers.CAOPEHandler import CAOPEHandler
 from Crypto.handlers.DomainPSIHandler import DomainPSIHandler
 from Crypto.handlers.OPEHandler import OPEHandler
-from Crypto.handlers.DHHandler import DHHandler
+from Crypto.handlers.DiffieHellmanHandler import DiffieHellmanHandler
 from Crypto.handlers.KyberHandler import KyberHandler
 from Crypto.handlers.FrodoKEMHandler import FrodoKEMHandler
 from Crypto.handlers.ClassicMcElieceHandler import ClassicMcElieceHandler
 from Crypto.handlers.PQCKEMHandlers import KEMHandler
+from Crypto.handlers.P384Handler import P384Handler
+from Crypto.handlers.Secp256k1Handler import Secp256k1Handler
+from Crypto.handlers.X448Handler import X448Handler
+from Crypto.handlers.RSAHandler import RSAHandler
+
 from Crypto.helpers.BFVHelper import BFVHelper
 from Crypto.helpers.CryptoImplementation import CryptoImplementation
 from Crypto.helpers.DamgardJurikHandler import DamgardJurikHelper
 from Crypto.helpers.PaillierHandler import PaillierHelper
-from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper
+from Crypto.helpers.DiffieHellmanHelper import DiffieHellmanHelper, DiffieHellman8192Helper
 from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
 from Crypto.helpers.ClassicMcElieceHelper import ClassicMcElieceHelper
+from Crypto.helpers.P384Helper import P384Helper
+from Crypto.helpers.Secp256k1Helper import Secp256k1Helper
+from Crypto.helpers.X448Helper import X448Helper
+from Crypto.helpers.RSAHelper import RSAHelper
+
 from Crypto.helpers.PQCKEMHelpers import BIKEHelper, HQCHelper, NTRUHelper, P256Helper, X25519Helper, HybridKyberX25519Helper, KyberHelper
 from Logs import Logs
 from Logs.Logs import ThreadData
@@ -45,6 +55,13 @@ class JSONHandler:
             "NTRU": NTRUHelper(),
             "P256": P256Helper(),
             "X25519": X25519Helper(),
+            
+            "Diffie-Hellman8192": DiffieHellman8192Helper(),
+            "P384": P384Helper(),
+            "Secp256k1": Secp256k1Helper(),
+            "X448": X448Helper(),
+            "RSA": RSAHelper(),
+            
             "HybridKyberX25519": HybridKyberX25519Helper(),
         }
 
@@ -54,10 +71,15 @@ class JSONHandler:
         self.domainPSIHandler = DomainPSIHandler(id, my_data, domain, devices, results, device_type=self.device_type)
 
         # NIKE handlers "clásicos"
-        self.DHHandler = DHHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.DiffieHellmanHandler = DiffieHellmanHandler(id, my_data, domain, devices, results, device_type=self.device_type)
         self.ClassicMcElieceHandler = ClassicMcElieceHandler(id, my_data, domain, devices, results, device_type=self.device_type)
         self.KyberHandler = KyberHandler(id, my_data, domain, devices, results, device_type=self.device_type)
         self.FrodoKEMHandler = FrodoKEMHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        
+        self.P384Handler = P384Handler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.Secp256k1Handler = Secp256k1Handler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.X448Handler = X448Handler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.RSAHandler = RSAHandler(id, my_data, domain, devices, results, device_type=self.device_type)
 
         # KEM genérico
         self.KEMHandlers = {
@@ -71,7 +93,7 @@ class JSONHandler:
 
         # NIKEHandlers indexados por nombre (string)
         self.NIKEHandlers = {
-            "Diffie-Hellman": self.DHHandler,
+            "Diffie-Hellman": self.DiffieHellmanHandler,
             "Kyber": self.KyberHandler,
             "FrodoKEM": self.FrodoKEMHandler,
             "ClassicMcEliece": self.ClassicMcElieceHandler,
@@ -81,6 +103,12 @@ class JSONHandler:
             "P256": self.KEMHandlers["P256"],
             "X25519": self.KEMHandlers["X25519"],
             "HybridKyberX25519": self.KEMHandlers["HybridKyberX25519"],
+            
+            "Diffie-Hellman8192": self.DiffieHellmanHandler,
+            "P384": self.P384Handler,
+            "Secp256k1Handler": self.Secp256k1Handler,
+            "X448": self.X448Handler,
+            "RSA": self.RSAHandler
         }
 
         self.id = id

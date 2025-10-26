@@ -1,3 +1,32 @@
+# Builder
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake ninja-build git libgmp-dev libssl-dev libffi-dev \
+      python3-dev && rm -rf /var/lib/apt/lists/*
+
+# Build liboqs
+RUN git clone --branch 0.12.0 --depth 1 https://github.com/open-quantum-safe/liboqs.git \
+ && cd liboqs && mkdir build && cd build \
+ && cmake -GNinja .. \
+      -DCMAKE_INSTALL_PREFIX=/opt/oqs \
+      -DBUILD_SHARED_LIBS=ON \
+      -DOQS_ENABLE_SIGS=OFF \
+      -DOQS_ENABLE_KEM_BIKE=ON \
+      -DOQS_ENABLE_KEM_CLASSIC_MCELIECE=ON \
+      -DOQS_ENABLE_KEM_FRODOKEM=ON \
+      -DOQS_ENABLE_KEM_HQC=ON \
+      -DOQS_ENABLE_KEM_KYBER=ON \
+      -DOQS_ENABLE_KEM_NTRU=ON \
+      -DOQS_ENABLE_KEM_NTRUPRIME=ON \
+ && ninja install
+
+RUN python3 -m pip install --upgrade pip \
+ && python3 -m pip install --no-cache-dir git+https://github.com/open-quantum-safe/liboqs-python.git@0.12.0
+
+# Runtime
 FROM python:3.11-slim
 
 LABEL authors="Santiago Arias, Alfonso González-Lamuño"
@@ -8,42 +37,21 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 1. Dependencias del sistema
+# Dependencias mínimas en tiempo de ejecución
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential cmake ninja-build git \
       libgmp-dev libssl-dev libffi-dev \
-      python3-dev python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
-# 2. Compilar liboqs con los KEMs habilitados
-RUN git clone --branch 0.12.0 --depth 1 https://github.com/open-quantum-safe/liboqs.git /opt/liboqs \
- && cd /opt/liboqs && mkdir build && cd build \
- && cmake -GNinja .. \
-      -DCMAKE_INSTALL_PREFIX=/opt/oqs \
-      -DBUILD_SHARED_LIBS=ON \
-      -DOQS_ENABLE_KEM_BIKE=ON \
-      -DOQS_ENABLE_KEM_CLASSIC_MCELIECE=ON \
-      -DOQS_ENABLE_KEM_FRODOKEM=ON \
-      -DOQS_ENABLE_KEM_HQC=ON \
-      -DOQS_ENABLE_KEM_KYBER=ON \
-      -DOQS_ENABLE_KEM_NTRU=ON \
-      -DOQS_ENABLE_KEM_NTRUPRIME=ON \
-      -DOQS_ENABLE_SIGS=OFF \
- && ninja install \
- && ln -sf /opt/oqs/lib/liboqs.so /usr/lib/liboqs.so
+# Copiar binarios de liboqs y site-packages de liboqs-python
+COPY --from=builder /opt/oqs /opt/oqs
+COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# 3. Instalar bindings de Python
-RUN python3 -m pip install --upgrade pip \
- && python3 -m pip install --no-cache-dir \
-      git+https://github.com/open-quantum-safe/liboqs-python.git@0.12.0
-
-# 4. Instalar la aplicación
 COPY . /app
+
 RUN python3 -m pip install --no-cache-dir -r requirements.txt \
  && python3 -m pip install --no-cache-dir ./Crypto/py-fhe waitress
 
-# 5. Entrypoint
-ENV LD_LIBRARY_PATH="/opt/oqs/lib"
 RUN chmod +x dockerstart.sh
 EXPOSE 5000
 CMD ["./dockerstart.sh"]

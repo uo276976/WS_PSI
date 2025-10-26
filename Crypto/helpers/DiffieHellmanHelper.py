@@ -1,59 +1,11 @@
-from Crypto.helpers.CSHelper import CSHelper
-import secrets
-import hashlib
+from Crypto.helpers.BaseDiffieHellmanHelper import BaseDiffieHellmanHelper
 
-
-class DiffieHellmanHelper(CSHelper):
+class DiffieHellmanHelper(BaseDiffieHellmanHelper):
+    """RFC 3526 Group 14 (2048-bit) Diffie–Hellman."""
     def __init__(self):
-        super().__init__()
-        self.imp_name = "Diffie-Hellman"
-        self.p = int((
-            "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
-            "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
-            "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
-            "E485B576625E7EC6F44C42E9A63A3620FFFFFFFFFFFFFFFF"
-        ), 16)  # 2048-bit safe prime
-        self.g = 2
-        self.private_key = None
-        self.public_key = None
-        self.shared_key = None
-        self.generate_keys()
+        super().__init__(bits=2048, hash_alg="sha256", name="Diffie-Hellman")
 
-    def generate_keys(self):
-        self.private_key = secrets.randbelow(self.p - 2) + 1  # en rango (1, p-1)
-        self.public_key = pow(self.g, self.private_key, self.p)
-        print(f"[DH] Public key generated: {self.public_key}")
-
-    def compute_shared_key(self, peer_pubkey):
-        peer_pubkey = int(peer_pubkey)
-        
-        # 1 < peer_pubkey < p−1
-        if not (2 <= peer_pubkey <= self.p -2):
-            raise ValueError("Invalid peer public key")
-        
-        shared_secret = pow(peer_pubkey, self.private_key, self.p)
-        print(f"[DH] Shared secret computed: {shared_secret}")
-
-        # Use SHA-256 as a KDF to derive a fixed-length key
-        shared_secret_bytes = str(shared_secret).encode()
-        derived_key = hashlib.sha256(shared_secret_bytes).digest()
-        self.shared_key = derived_key
-        print(f"[DH] Derived key (SHA-256): {derived_key.hex()}")
-
-    def serialize_public_key(self):
-        return {'public_key': str(self.public_key)}
-
-    def reconstruct_public_key(self, public_key_dict):
-        if isinstance(public_key_dict, dict):
-            return int(public_key_dict['public_key'])
-        elif isinstance(public_key_dict, str):
-            return int(public_key_dict)
-        else:
-            raise TypeError(f"Unexpected type for public key: {type(public_key_dict)}")
-
-    def get_ciphertext(self):
-        """Devuelve la pubkey como 'ciphertext' para compatibilidad con el test."""
-        return str(self.public_key)
-
-    def serialize_result(self, result, type=None):
-        return str(result) if type == "OPE" else result
+class DiffieHellman8192Helper(BaseDiffieHellmanHelper):
+    """RFC 3526 Group 18 (8192-bit) Diffie–Hellman."""
+    def __init__(self):
+        super().__init__(bits=8192, hash_alg="sha512", name="Diffie-Hellman-8192")

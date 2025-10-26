@@ -18,10 +18,9 @@ class DamgardJurikHelper(CSHelper):
         # //2 because of the keygen on Android, to match the keygen on Paillier as well, the effective key size is the
         # product of p and q, but these are 2048 bits long, so the effective key size would be 4096 bits if this is not
         # divided by 2.
-        print("Generating Damgard-Jurik keys - bit length: " + str(bit_length) + " - This operation uses safe primes,"
-                                                                                 " it could take up to a minute")
+        # print("Generating Damgard-Jurik keys - bit length: " + str(bit_length) + " - This operation uses safe primes," + " it could take up to a minute")
         self.public_key, self.private_key = keygen(n_bits=bit_length//2, s=DEFL_EXPANSIONFACTOR, threshold=1, n_shares=1)
-        print("Damgard-Jurik keys generated")
+        # print("Damgard-Jurik keys generated")
 
     def encrypt(self, number):
         return self.public_key.encrypt(number)
@@ -63,7 +62,7 @@ class DamgardJurikHelper(CSHelper):
                 range(domain)}
 
     def get_multiplied_set(self, enc_set, node_set):
-        print("Generating the multiplied set")
+        # print("Generating the multiplied set")
         result = {}
         for element, encrypted_value in enc_set.items():
             multiplier = int(element) in node_set
@@ -88,7 +87,7 @@ class DamgardJurikHelper(CSHelper):
         return result
 
     def eval_coefficients(self, coefs, pubkey, my_data):
-        print("Evaluating the polynomial")
+        # print("Evaluating the polynomial")
         encrypted_results = []
         for element in my_data:
             rb = random.randint(1, 1000)
@@ -97,7 +96,7 @@ class DamgardJurikHelper(CSHelper):
         return encrypted_results
 
     def get_evaluations(self, coefs, pubkey, my_data):
-        print("Evaluating the polynomial")
+        # print("Evaluating the polynomial")
         evaluations = []
         for element in my_data:
             rb = random.randint(1, 1000)

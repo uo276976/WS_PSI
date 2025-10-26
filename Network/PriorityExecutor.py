@@ -21,7 +21,7 @@ class PrioritizedItem:
 
 class PriorityExecutor:
     def __init__(self, max_workers=None):
-        # --- Benchmark Mode Setup ---
+        # Benchmark Mode Setup
         benchmark_mode = os.getenv("BENCHMARK_MODE", "false").lower() == "true"
         self.benchmark_mode = benchmark_mode
 

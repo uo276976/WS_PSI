@@ -2,7 +2,7 @@ import sys
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.LogContext import with_log_context
 
-class DHHandler(IntersectionHandler):
+class DiffieHellmanHandler(IntersectionHandler):
     def intersection_first_step(self, device, cs):
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
@@ -26,7 +26,7 @@ class DHHandler(IntersectionHandler):
                 peer_key = cs.reconstruct_public_key(peer_pubkey)
                 cs.compute_shared_key(peer_key)
             hexkey = cs.shared_key.hex()
-            self.results[f"{device} DH SharedKey"] = hexkey
-            print(f"[DHHandler] Shared derived key with {device}: {hexkey}")
+            self.results[f"{device} Diffie-Hellman SharedKey"] = hexkey
+            # print(f"[DiffieHellman] Shared derived key with {device}: {hexkey}")
         self.stop_persistent_logging()
         return None, None

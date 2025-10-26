@@ -1,4 +1,5 @@
 import json
+import time
 from Logs.Logs import ThreadData, start_logging, stop_logging
 
 class IntersectionHandler:

@@ -3,7 +3,7 @@ from firebase_admin import credentials, db, initialize_app
 from Network.collections.DbConstants import FB_URL
 
 
-SAMPLING_INTERVAL = 0.05
+SAMPLING_INTERVAL = 0.02
 default_app = None
 
 
@@ -44,6 +44,7 @@ class ThreadData:
     def __init__(self):
         self.cpu_usage, self.ram_usage = [], []
         self.instance_cpu_usage, self.instance_ram_usage = [], []
+        self.timestamps = []
         self.avg_cpu_usage = self.avg_ram_usage = 0
         self.avg_instance_cpu_usage = self.avg_instance_ram_usage = 0
         self.peak_cpu_usage = self.peak_ram_usage = 0
@@ -102,34 +103,33 @@ def log_cpu_usage(td: ThreadData):
 
 def log_instance_cpu_usage(td: ThreadData):
     proc = psutil.Process(os.getpid())
-    limits = get_container_limits()
-    cores = max(1e-3, limits["cpu_cores"])
+    cores = max(1e-3, get_container_limits()["cpu_cores"])
 
     try:
         proc.cpu_percent(None)
     except Exception:
         pass
 
+    alpha = 0.3
+    ema = 0.0
+
     while not td.stop_event.is_set():
         try:
             raw = proc.cpu_percent(interval=SAMPLING_INTERVAL)
-            est = raw / max(cores, 1e-6)
-            if td.instance_cpu_usage:
-                prev = td.instance_cpu_usage[-1]
-                est = 0.7 * prev + 0.3 * est
+            normalized = raw / max(cores, 1e-6)
+            ema = (1 - alpha) * ema + alpha * normalized
 
-            epsilon = 0.2
-            if 0.0 < est < epsilon:
-                est = epsilon
-            elif 100.0 - epsilon < est < 100.0:
-                est = 100.0 - epsilon
+            # clamp a [0,100]
+            if ema < 0.0: ema = 0.0
+            if ema > 100.0: ema = 100.0
 
-            td.instance_cpu_usage.append(round(min(100.0, max(0.0, est)), 2))
-
+            td.instance_cpu_usage.append(round(ema, 2))
+            td.timestamps.append(time.time())
         except Exception:
             td.instance_cpu_usage.append(0.0)
+            td.timestamps.append(time.time())
 
-        time.sleep(SAMPLING_INTERVAL)
+            continue
 
 def log_ram_usage(td: ThreadData):
     prev = None
@@ -144,6 +144,7 @@ def log_ram_usage(td: ThreadData):
             if current < 0:
                 current = 0.0
             td.ram_usage.append(round(current, 2))
+            td.timestamps.append(time.time())
 
         except Exception:
             td.ram_usage.append(0.0)
@@ -174,28 +175,34 @@ def log_instance_ram_usage(td: ThreadData):
 
 def start_logging(td: ThreadData):
     td.stop_event.clear()
+    proc = psutil.Process(os.getpid())
+    proc.cpu_percent(None)
+
     for fn in [log_cpu_usage, log_instance_cpu_usage, log_ram_usage, log_instance_ram_usage]:
         threading.Thread(target=fn, args=(td,), daemon=True).start()
+    time.sleep(SAMPLING_INTERVAL * 2)
 
 def stop_logging(td: ThreadData):
     td.stop_event.set()
-    time.sleep(0.05)
+    time.sleep(SAMPLING_INTERVAL * 6)
     _aggregate_stats(td)
 
 def _aggregate_stats(td: ThreadData):
-    def avg_and_peak(v):
+    def avg_peak_median(v):
         if not v:
-            return 0.0, 0.0
-        vals = [x for x in v if 0 < x < 1000]
+            return 0.0, 0.0, 0.0
+        vals = [x for x in v if 0 <= x < 1000]
         if not vals:
-            return 0.0, 0.0
-        tail = vals[-max(1, len(vals)//5):]
-        return round(np.mean(tail), 2), round(np.max(tail), 2)
-    td.avg_cpu_usage, td.peak_cpu_usage = avg_and_peak(td.cpu_usage)
-    td.avg_instance_cpu_usage, td.peak_instance_cpu_usage = avg_and_peak(td.instance_cpu_usage)
-    td.avg_ram_usage, td.peak_ram_usage = avg_and_peak(td.ram_usage)
-    td.avg_instance_ram_usage, td.peak_instance_ram_usage = avg_and_peak(td.instance_ram_usage)
+            return 0.0, 0.0, 0.0
+        if len(vals) == 1:
+            return vals[0], vals[0], vals[0]
+        tail = vals[-max(3, len(vals)//5):]
+        return round(np.mean(tail), 2), round(np.max(vals), 2), round(np.median(tail), 2)
 
+    td.avg_cpu_usage, td.peak_cpu_usage, td.median_cpu_usage = avg_peak_median(td.cpu_usage)
+    td.avg_instance_cpu_usage, td.peak_instance_cpu_usage, td.median_instance_cpu_usage = avg_peak_median(td.instance_cpu_usage)
+    td.avg_ram_usage, td.peak_ram_usage, td.median_ram_usage = avg_peak_median(td.ram_usage)
+    td.avg_instance_ram_usage, td.peak_instance_ram_usage, td.median_instance_ram_usage = avg_peak_median(td.instance_ram_usage)
 
 def _push_log_async(ref, log):
     try:
@@ -207,6 +214,20 @@ def _push_log_async(ref, log):
             print(f"[FIREBASE] Setup log pushed for {log.get('id')}")
     except Exception as e:
         print(f"[FIREBASE][ERROR] Failed to push log: {e}")
+        
+        
+def push_temporal_trace(handler_id, td: ThreadData, scheme, step, device_type):
+    ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/traces")
+    data = {
+        "timestamps": td.timestamps[-500:],
+        "cpu": td.instance_cpu_usage[-500:],
+        "ram": td.instance_ram_usage[-500:],
+        "scheme": scheme,
+        "step": step,
+        "device_type": device_type,
+        "uploaded_at": datetime.datetime.utcnow().isoformat() + "Z"
+    }
+    threading.Thread(target=_push_log_async, args=(ref, data), daemon=True).start()
 
 
 def log_activity_to_firebase(thread_data, activity_code, duration, version, handler_id,
@@ -217,13 +238,15 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
 
     limits = get_container_limits()
     profile_mem = limits["memory_mb"]
-    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
     
     if thread_data is None:
         print(f"[FIREBASE][WARN] Missing thread_data for {activity_code}, skipping metrics.")
         thread_data = type("EmptyTD", (), {
             "avg_instance_cpu_usage": 0.0,
             "avg_instance_ram_usage": 0.0,
+            "peak_instance_cpu_usage": 0.0,
+            "peak_instance_ram_usage": 0.0,
         })()
 
     log = {
@@ -238,7 +261,9 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
         "category": category,
         "step": step,
         "Avg_instance_CPU": f"{thread_data.avg_instance_cpu_usage}%",
+        "Peak_instance_CPU": f"{thread_data.peak_instance_cpu_usage}%",
         "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage}MB / {profile_mem}MB",
+        "Peak_instance_RAM": f"{thread_data.peak_instance_ram_usage}MB / {profile_mem}MB",
     }
 
     ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/activities")

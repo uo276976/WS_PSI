@@ -16,9 +16,9 @@ class PaillierHelper(CSHelper):
 
     # Devuelve los objetos clave pública y privada
     def generate_keys(self, bit_length=DEFL_KEYSIZE_PAILLIER):
-        print("Generating Paillier keys - bit length: " + str(bit_length))
+        # print("Generating Paillier keys - bit length: " + str(bit_length))
         self.public_key, self.private_key = paillier.generate_paillier_keypair(n_length=bit_length)
-        print("Paillier keys generated")
+        # print("Paillier keys generated")
 
     def serialize_public_key(self):
         # Convertir la clave pública en un diccionario con la n
@@ -58,7 +58,7 @@ class PaillierHelper(CSHelper):
 
     def get_multiplied_set(self, enc_set, node_set):
         # Propósito de depuración
-        print("Generating the multiplied set")
+        # print("Generating the multiplied set")
         result = {}
         for element, encrypted_value in enc_set.items():
             multiplier = int(element) in node_set
@@ -86,7 +86,7 @@ class PaillierHelper(CSHelper):
         return result
 
     def eval_coefficients(self, coeffs, pubkey, my_data):
-        print("Evaluating the polynomial")
+        # print("Evaluating the polynomial")
         encrypted_results = []
         for element in my_data:
             rb = random.randint(1, 1000)

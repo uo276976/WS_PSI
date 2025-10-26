@@ -156,15 +156,23 @@ function updateDevices() {
           { value: 'Paillier|PSI-CA', text: 'Cardinalidad - Paillier' },
           { value: 'DamgardJurik|PSI-CA', text: 'Cardinalidad - Damgard-Jurik' },
           { value: 'BFV|OPE', text: 'BFV' },
-          { value: 'Diffie-Hellman|NIKE', text: 'NIKE - Diffie-Hellman' },
+
+          // NIKE algorithms
+          { value: 'Diffie-Hellman|NIKE', text: 'NIKE - Diffie-Hellman (2048)' },
+          { value: 'Diffie-Hellman-8192|NIKE', text: 'NIKE - Diffie-Hellman (8192)' },
+          { value: 'P256|NIKE', text: 'NIKE - P256' },
+          { value: 'P384|NIKE', text: 'NIKE - P384' },
+          { value: 'secp256k1|NIKE', text: 'NIKE - secp256k1' },
+          { value: 'X25519|NIKE', text: 'NIKE - X25519' },
+          { value: 'X448|NIKE', text: 'NIKE - X448' },
+          { value: 'RSA|NIKE', text: 'NIKE - RSA' },
+
           { value: 'Kyber|NIKE', text: 'NIKE - Kyber' },
           { value: 'FrodoKEM|NIKE', text: 'NIKE - FrodoKEM' },
           { value: 'ClassicMcEliece|NIKE', text: 'NIKE - McEliece' },
           { value: 'NTRU|NIKE', text: 'NIKE - NTRU' },
           { value: 'BIKE|NIKE', text: 'NIKE - BIKE' },
           { value: 'HQC|NIKE', text: 'NIKE - HQC' },
-          { value: 'X25519|NIKE', text: 'NIKE - X25519' },
-          { value: 'P256|NIKE', text: 'NIKE - P256' },
           { value: 'HybridKyberX25519|NIKE', text: 'NIKE - HybridKyberX25519' }
         ];
 
@@ -263,13 +271,26 @@ function normalizeScheme(s) {
     'CA-OPE': 'CAOPE',
     'CA_OPE': 'CAOPE',
 
-    // NIKE
+    // NIKE (normalized identifiers)
     'DH': 'Diffie-Hellman',
     'DiffieHellman': 'Diffie-Hellman',
     'Diffie Hellman': 'Diffie-Hellman',
+    'Diffie-Hellman-8192': 'Diffie-Hellman-8192',
+    'DH8192': 'Diffie-Hellman-8192',
+
     'Curve25519': 'X25519',
     'X25519': 'X25519',
+    'X448': 'X448',
+
     'P256': 'P256',
+    'P-256': 'P256',
+    'P384': 'P384',
+    'P-384': 'P384',
+
+    'Secp256k1': 'secp256k1',
+    'secp256k1': 'secp256k1',
+    'Secp256K1': 'secp256k1',
+
     'Frodo': 'FrodoKEM',
     'FrodoKEM': 'FrodoKEM',
     'Kyber': 'Kyber',
@@ -279,6 +300,7 @@ function normalizeScheme(s) {
     'McEliece': 'ClassicMcEliece',
     'Classic McEliece': 'ClassicMcEliece',
     'ClassicMcEliece': 'ClassicMcEliece',
+
     'HybridKyber_X25519': 'HybridKyberX25519',
     'HybridKyber-X25519': 'HybridKyberX25519',
     'Hybrid Kyber X25519': 'HybridKyberX25519'
