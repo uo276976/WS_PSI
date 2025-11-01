@@ -41,6 +41,165 @@ function getNodePort() {
         .fail(() => showToast("Failed to retrieve port"));
 }
 
+let knownDevices = {};
+
+function buildDeviceCard(key, value) {
+  const displayKey = key.replace(/:.*:/, '::');
+  const deviceType = value.device_type || 'Unknown';
+  const active = value.active;
+
+  // Card structure
+  const col = document.createElement('div');
+  col.className = 'col s12 m6 l4 xl3';
+
+  const card = document.createElement('article');
+  card.className = `card z-depth-2 ${deviceType.toLowerCase()}-device`;
+  card.id = `card-${key}`;
+  card.setAttribute('role', 'region');
+  card.setAttribute('aria-label', `Dispositivo ${displayKey}`);
+
+  // Card content
+  const content = document.createElement('div');
+  content.className = 'card-content';
+
+  const title = document.createElement('h3');
+  title.className = 'card-title';
+  title.textContent = displayKey;
+
+  const typeInfo = document.createElement('p');
+  typeInfo.innerHTML = `<strong>Tipo:</strong> ${deviceType}`;
+
+  const statusText = active ? 'Activo' : 'Desconectado';
+  const statusColor = active ? 'green-text' : 'red-text';
+  const statusInfo = document.createElement('p');
+  statusInfo.className = 'status-info';
+  statusInfo.innerHTML = `
+    <strong>Estado de conexión:</strong> 
+    <span class="${statusColor}">${statusText}</span>
+  `;
+
+  const resultDiv = document.createElement('div');
+  resultDiv.className = 'result-message';
+  resultDiv.id = `result-${key}`;
+
+  content.append(title, typeInfo, statusInfo, resultDiv);
+
+  // Card actions
+  const actions = document.createElement('div');
+  actions.className = 'card-action';
+
+  const btnGroup = document.createElement('div');
+  btnGroup.className = 'btn-group';
+
+  const buttons = [
+    { label: 'Ping', color: 'green', category: null, action: () => pingDevice(key) },
+    { label: 'Test PSI', color: 'orange', category: 'psi' },
+    { label: 'Test OPE', color: 'blue', category: 'ope' },
+    { label: 'Test NIKE', color: 'red', category: 'nike' },
+    { label: 'Test All', color: 'light-blue', category: 'all' }
+  ];
+
+  buttons.forEach(btnData => {
+    const btn = document.createElement('button');
+    btn.className = `btn-small waves-effect waves-light ${btnData.color}`;
+    btn.type = 'button';
+    btn.textContent = btnData.label;
+    btn.setAttribute('data-device', key);
+    btn.setAttribute('aria-label', `${btnData.label} en ${displayKey}`);
+
+    if (btnData.category) {
+      btn.dataset.category = btnData.category;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        testCategory(key, btnData.category);
+      });
+    } else {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        btnData.action();
+      });
+    }
+
+    btnGroup.appendChild(btn);
+  });
+
+  // Scheme selector
+  const schemeField = document.createElement('div');
+  schemeField.className = 'input-field flex-row';
+
+  const select = document.createElement('select');
+  select.className = 'scheme-selector';
+  select.id = `scheme-${key}`;
+  select.dataset.device = key;
+  select.setAttribute('aria-label', `Seleccionar esquema para ${displayKey}`);
+
+  const schemes = [
+    { value: '', text: 'Selecciona un esquema', disabled: true, selected: true },
+    { value: 'Paillier|PSI-CA', text: 'Cardinalidad - Paillier' },
+    { value: 'Damgard-Jurik|PSI-CA', text: 'Cardinalidad - Damgard-Jurik' },
+    { value: 'BFV|OPE', text: 'BFV' },
+    // NIKE algorithms
+    { value: 'Diffie-Hellman|NIKE', text: 'NIKE - Diffie-Hellman (2048)' },
+    { value: 'Diffie-Hellman-8192|NIKE', text: 'NIKE - Diffie-Hellman (8192)' },
+    { value: 'P-256|NIKE', text: 'NIKE - P-256' },
+    { value: 'P-384|NIKE', text: 'NIKE - P-384' },
+    { value: 'secp256k1|NIKE', text: 'NIKE - secp256k1' },
+    { value: 'X25519|NIKE', text: 'NIKE - X25519' },
+    { value: 'X448|NIKE', text: 'NIKE - X448' },
+    { value: 'RSA|NIKE', text: 'NIKE - RSA' },
+    { value: 'Kyber|NIKE', text: 'NIKE - Kyber' },
+    { value: 'FrodoKEM|NIKE', text: 'NIKE - FrodoKEM' },
+    { value: 'ClassicMcEliece|NIKE', text: 'NIKE - McEliece' },
+    { value: 'sntrup761|NIKE', text: 'NIKE - sntrup761' },
+    { value: 'BIKE-L1|NIKE', text: 'NIKE - BIKE-L1' },
+    { value: 'HQC-192|NIKE', text: 'NIKE - HQC-192' },
+    { value: 'Hybrid-Kyber-X25519|NIKE', text: 'NIKE - Hybrid-Kyber-X25519' }
+  ];
+
+  schemes.forEach(optData => {
+    const opt = document.createElement('option');
+    opt.value = optData.value;
+    opt.textContent = optData.text;
+    if (optData.disabled) opt.disabled = true;
+    if (optData.selected) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  const startBtn = document.createElement('button');
+  startBtn.className = 'btn-small btn-dark scheme-btn';
+  startBtn.type = 'button';
+  startBtn.textContent = 'Iniciar';
+  startBtn.dataset.device = key;
+  startBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const selectedValue = select.value;
+    if (!selectedValue) {
+      showToast("Selecciona un esquema primero");
+      return;
+    }
+    runScheme(key, selectedValue);
+  });
+
+  schemeField.append(select, startBtn);
+  actions.append(btnGroup, schemeField);
+  card.append(content, actions);
+  col.appendChild(card);
+
+  return col;
+}
+
+function updateDeviceCard(key, newInfo) {
+  const card = document.getElementById(`card-${key}`);
+  if (!card) return;
+
+  const span = card.querySelector('.status-info span');
+  const newStatusText = newInfo.active ? 'Activo' : 'Desconectado';
+  const newColor = newInfo.active ? 'green-text' : 'red-text';
+
+  span.className = newColor;
+  span.textContent = `${newStatusText}`;
+}
+
 function updateDevices() {
   fetch('/api/devices')
     .then(response => {
@@ -48,165 +207,74 @@ function updateDevices() {
       return response.json();
     })
     .then(data => {
-      const devicesContainer = document.getElementById('devices');
-      const devicesHeader = document.getElementById('devicesConnected');
-      devicesContainer.innerHTML = '';
+      const devicesHeader  = document.getElementById('devicesConnected');
+      const cardsContainer = document.getElementById('device-cards');
+      const introBlock     = document.getElementById('devices-intro');
+      const devicesWrapper = document.getElementById('devices');
 
+      // === handle disconnected state ===
       if (data.status === NODE_NOT_CONNECTED) {
         devicesHeader.textContent = 'El nodo está desconectado';
+        Object.values(cardsContainer.children).forEach(col => col.classList.add('dimmed'));
+        // asegúrate de que el mensaje introductorio esté visible
+        if (introBlock) introBlock.style.display = 'block';
         return;
       }
 
+      // === handle empty network ===
       if (Object.keys(data).length === 0) {
         devicesHeader.textContent = 'No se han descubierto pares aún';
-        const info = document.createElement('p');
-        info.className = 'grey-text';
-        info.innerHTML = `Prueba haciendo clic en <strong>"Buscar peers"</strong> para detectar nodos en la red.`;
-        devicesContainer.appendChild(info);
+        Object.values(cardsContainer.children).forEach(col => col.classList.add('dimmed'));
+        // mostrar el bloque de "Buscar peers"
+        if (introBlock) introBlock.style.display = 'block';
         return;
       }
 
+      // === normal state: show / update cards ===
       devicesHeader.textContent = 'Dispositivos registrados';
 
-      const row = document.createElement('div');
-      row.className = 'row';
+      // ocultar el bloque de "Buscar peers" si hay nodos
+      if (introBlock) introBlock.style.display = 'none';
 
+      const currentKeys = new Set(Object.keys(knownDevices));
+
+      // Add or update
       Object.entries(data).forEach(([key, value]) => {
-        const displayKey = key.replace(/:.*:/, '::');
-        const deviceType = value.device_type || 'Unknown';
-        const lastSeen = value.last_seen || 'N/A';
-
-        // Card structure
-        const col = document.createElement('div');
-        col.className = 'col s12 m6 l4';
-
-        const card = document.createElement('article');
-        card.className = `card z-depth-2 ${deviceType.toLowerCase()}-device`;
-        card.id = `card-${key}`;
-        card.setAttribute('role', 'region');
-        card.setAttribute('aria-label', `Dispositivo ${displayKey}`);
-
-        // Card content
-        const content = document.createElement('div');
-        content.className = 'card-content';
-
-        const title = document.createElement('h3');
-        title.className = 'card-title';
-        title.textContent = displayKey;
-
-        const typeInfo = document.createElement('p');
-        typeInfo.innerHTML = `<strong>Tipo:</strong> ${deviceType}`;
-
-        const lastSeenInfo = document.createElement('p');
-        lastSeenInfo.innerHTML = `<strong>Última conexión:</strong> ${lastSeen}`;
-
-        const resultDiv = document.createElement('div');
-        resultDiv.className = 'result-message';
-        resultDiv.id = `result-${key}`;
-
-        // Append card content
-        content.append(title, typeInfo, lastSeenInfo, resultDiv);
-
-        // Card actions
-        const actions = document.createElement('div');
-        actions.className = 'card-action';
-
-        const btnGroup = document.createElement('div');
-        btnGroup.className = 'btn-group';
-
-        // Buttons with proper semantics and event listeners
-        const buttons = [
-          { label: 'Ping', color: 'green', category: null, action: () => pingDevice(key) },
-          { label: 'Test PSI', color: 'orange', category: 'psi' },
-          { label: 'Test OPE', color: 'blue', category: 'ope' },
-          { label: 'Test NIKE', color: 'red', category: 'nike' },
-          { label: 'Test All', color: 'light-blue', category: 'all' }
-        ];
-
-        buttons.forEach(btnData => {
-          const btn = document.createElement('button');
-          btn.className = `btn-small waves-effect waves-light ${btnData.color}`;
-          btn.type = 'button';
-          btn.textContent = btnData.label;
-          btn.setAttribute('data-device', key);
-          btn.setAttribute('aria-label', `${btnData.label} en ${displayKey}`);
-
-          if (btnData.category) {
-            btn.dataset.category = btnData.category;
-            btn.addEventListener('click', () => testCategory(key, btnData.category));
-          } else {
-            btn.addEventListener('click', btnData.action);
-          }
-
-          btnGroup.appendChild(btn);
-        });
-
-        // Scheme selector and Start button
-        const schemeField = document.createElement('div');
-        schemeField.className = 'input-field flex-row';
-
-        const select = document.createElement('select');
-        select.className = 'scheme-selector';
-        select.id = `scheme-${key}`;
-        select.dataset.device = key;
-        select.setAttribute('aria-label', `Seleccionar esquema para ${displayKey}`);
-
-        const schemes = [
-          { value: '', text: 'Selecciona un esquema', disabled: true, selected: true },
-          { value: 'Paillier|PSI-CA', text: 'Cardinalidad - Paillier' },
-          { value: 'DamgardJurik|PSI-CA', text: 'Cardinalidad - Damgard-Jurik' },
-          { value: 'BFV|OPE', text: 'BFV' },
-
-          // NIKE algorithms
-          { value: 'Diffie-Hellman|NIKE', text: 'NIKE - Diffie-Hellman (2048)' },
-          { value: 'Diffie-Hellman-8192|NIKE', text: 'NIKE - Diffie-Hellman (8192)' },
-          { value: 'P256|NIKE', text: 'NIKE - P256' },
-          { value: 'P384|NIKE', text: 'NIKE - P384' },
-          { value: 'secp256k1|NIKE', text: 'NIKE - secp256k1' },
-          { value: 'X25519|NIKE', text: 'NIKE - X25519' },
-          { value: 'X448|NIKE', text: 'NIKE - X448' },
-          { value: 'RSA|NIKE', text: 'NIKE - RSA' },
-
-          { value: 'Kyber|NIKE', text: 'NIKE - Kyber' },
-          { value: 'FrodoKEM|NIKE', text: 'NIKE - FrodoKEM' },
-          { value: 'ClassicMcEliece|NIKE', text: 'NIKE - McEliece' },
-          { value: 'NTRU|NIKE', text: 'NIKE - NTRU' },
-          { value: 'BIKE|NIKE', text: 'NIKE - BIKE' },
-          { value: 'HQC|NIKE', text: 'NIKE - HQC' },
-          { value: 'HybridKyberX25519|NIKE', text: 'NIKE - HybridKyberX25519' }
-        ];
-
-        schemes.forEach(optData => {
-          const opt = document.createElement('option');
-          opt.value = optData.value;
-          opt.textContent = optData.text;
-          if (optData.disabled) opt.disabled = true;
-          if (optData.selected) opt.selected = true;
-          select.appendChild(opt);
-        });
-
-        const startBtn = document.createElement('button');
-        startBtn.className = 'btn-small btn-dark scheme-btn';
-        startBtn.type = 'button';
-        startBtn.textContent = 'Iniciar';
-        startBtn.dataset.device = key;
-        startBtn.addEventListener('click', () => {
-          const selectedValue = select.value;
-          runScheme(key, selectedValue);
-        });
-
-        schemeField.append(select, startBtn);
-        actions.append(btnGroup, schemeField);
-
-        card.append(content, actions);
-        col.appendChild(card);
-        row.appendChild(col);
+        const existing = document.getElementById(`card-${key}`);
+        if (!existing) {
+          const newCard = buildDeviceCard(key, value);
+          newCard.style.opacity = '0';
+          cardsContainer.appendChild(newCard);
+          requestAnimationFrame(() => {
+            newCard.style.transition = 'opacity 0.3s';
+            newCard.style.opacity = '1';
+          });
+          knownDevices[key] = value;
+        } else {
+          updateDeviceCard(key, value);
+          existing.closest('.col').classList.remove('dimmed');
+          knownDevices[key] = value;
+        }
+        currentKeys.delete(key);
       });
 
-      devicesContainer.appendChild(row);
+      // Remove stale (but delay removal to prevent flicker)
+      currentKeys.forEach(staleKey => {
+        const cardEl = document.getElementById(`card-${staleKey}`);
+        if (cardEl) {
+          const wrapper = cardEl.closest('.col');
+          wrapper.style.transition = 'opacity 0.3s';
+          wrapper.style.opacity = '0';
+          setTimeout(() => wrapper.remove(), 350);
+        }
+        delete knownDevices[staleKey];
+      });
 
-      const selects = devicesContainer.querySelectorAll('select');
-      M.FormSelect.init(selects);
+      // Re-init Materialize selects
+      setTimeout(() => {
+        const selects = document.querySelectorAll('select.scheme-selector');
+        if (M && M.FormSelect) M.FormSelect.init(selects);
+      }, 50);
     })
     .catch(() => showToast("No se pudieron cargar los dispositivos"));
 }
@@ -254,60 +322,6 @@ function testCategory(device, category) {
         });
 }
 
-function normalizeScheme(s) {
-  const map = {
-    // PSI / OPE aliases
-    'Paillier OPE': 'Paillier',
-    'Paillier_OPE': 'Paillier',
-    'Paillier PSI-CA OPE': 'Paillier',
-
-    'Damgard-Jurik': 'DamgardJurik',
-    'DamgardJurik OPE': 'DamgardJurik',
-    'Damgard-Jurik_OPE': 'DamgardJurik',
-    'Damgard-Jurik PSI-CA OPE': 'DamgardJurik',
-
-    'BFV_OPE': 'BFV',
-    'BFV OPE': 'BFV',
-    'CA-OPE': 'CAOPE',
-    'CA_OPE': 'CAOPE',
-
-    // NIKE (normalized identifiers)
-    'DH': 'Diffie-Hellman',
-    'DiffieHellman': 'Diffie-Hellman',
-    'Diffie Hellman': 'Diffie-Hellman',
-    'Diffie-Hellman-8192': 'Diffie-Hellman-8192',
-    'DH8192': 'Diffie-Hellman-8192',
-
-    'Curve25519': 'X25519',
-    'X25519': 'X25519',
-    'X448': 'X448',
-
-    'P256': 'P256',
-    'P-256': 'P256',
-    'P384': 'P384',
-    'P-384': 'P384',
-
-    'Secp256k1': 'secp256k1',
-    'secp256k1': 'secp256k1',
-    'Secp256K1': 'secp256k1',
-
-    'Frodo': 'FrodoKEM',
-    'FrodoKEM': 'FrodoKEM',
-    'Kyber': 'Kyber',
-    'BIKE': 'BIKE',
-    'HQC': 'HQC',
-    'NTRU': 'NTRU',
-    'McEliece': 'ClassicMcEliece',
-    'Classic McEliece': 'ClassicMcEliece',
-    'ClassicMcEliece': 'ClassicMcEliece',
-
-    'HybridKyber_X25519': 'HybridKyberX25519',
-    'HybridKyber-X25519': 'HybridKyberX25519',
-    'Hybrid Kyber X25519': 'HybridKyberX25519'
-  };
-  return (map[s] || s).trim();
-}
-
 function runScheme(device, value) {
     if (!value || !value.includes('|')) {
         showToast("Invalid scheme. Please select one to continue.");
@@ -316,54 +330,78 @@ function runScheme(device, value) {
     }
 
     const [scheme, type] = value.split('|').map(s => s.trim());
+    if (!scheme || !type) {
+        showResult(device, `<strong>Error:</strong> Missing scheme or type.`);
+        return;
+    }
+
+    const normalizedType = type.toUpperCase();
 
     const startMsg = `<div>
         <strong>Starting algorithm:</strong><br>
         <strong>Device:</strong> ${device}<br>
         <strong>Scheme:</strong> ${scheme}<br>
-        <strong>Type:</strong> ${type}<br>
+        <strong>Type:</strong> ${normalizedType}<br>
         <em>Waiting for response...</em>
     </div>`;
-    showResult(device, startMsg);
-    showToast(`Starting algorithm for ${scheme} (${device})`);
 
-    const schemeNorm = normalizeScheme(scheme);
-    findIntersection(device, schemeNorm, type.toUpperCase(), 1);
+    showResult(device, startMsg);
+    showToast(`Starting ${scheme} (${normalizedType}) for ${device}`);
+
+    findIntersection(device, scheme, normalizedType, 1);
 }
 
 function findIntersection(device, scheme, type, rounds = 1) {
+    const payload = { device, scheme, type, rounds };
+
     $.ajax({
         url: '/api/intersection',
         type: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ device, scheme, type, rounds }),
-        dataType: 'json'
+        data: JSON.stringify(payload),
+        dataType: 'json',
+        timeout: 30000
     })
-        .done(response => {
-            const message = response.status;
-            const successMsg = `<div>
-                <strong>Execution finished:</strong><br>
-                <strong>Device:</strong> ${device}<br>
-                <strong>Scheme:</strong> ${scheme}<br>
-                <strong>Type:</strong> ${type}<br>
-                <strong>Rounds:</strong> ${rounds}<br>
-                <strong>Status:</strong> ${message}
-            </div>`;
-            showToast(`${scheme} executed on ${device}`);
-            showResult(device, successMsg);
-        })
-        .fail((xhr, status, error) => {
-            const errorMsg = `<div>
-                <strong>Error during execution</strong><br>
-                <strong>Device:</strong> ${device}<br>
-                <strong>Scheme:</strong> ${scheme}<br>
-                <strong>Type:</strong> ${type}<br>
-                <strong>Rounds:</strong> ${rounds}<br>
-                <strong>Details:</strong> ${error || "Unknown error"}
-            </div>`;
-            showToast(`Failed to execute ${scheme} on ${device}`);
-            showResult(device, errorMsg);
-        });
+    .done(response => {
+        const message = response?.status || "No response message";
+        const valid = message.toLowerCase().includes(scheme.toLowerCase()) ||
+                      message.toLowerCase().includes(type.toLowerCase());
+
+        let alertMsg = "";
+        if (!valid) {
+            console.warn("[Warning] Response content did not match the requested operation!", {
+                requested: payload,
+                received: message
+            });
+            alertMsg = `<br><strong style="color:red;">Warning:</strong> 
+                        Response did not match the requested scheme/type. Please verify backend execution.`;
+        }
+
+        const successMsg = `<div>
+            <strong>Execution finished:</strong><br>
+            <strong>Device:</strong> ${device}<br>
+            <strong>Scheme:</strong> ${scheme}<br>
+            <strong>Type:</strong> ${type}<br>
+            <strong>Rounds:</strong> ${rounds}<br>
+            <strong>Status:</strong> ${message}${alertMsg}
+        </div>`;
+
+        showToast(`${scheme} executed on ${device}`);
+        showResult(device, successMsg);
+    })
+    .fail((xhr, status, error) => {
+        let errorText = xhr.responseText || error || "Unknown error";
+        const errorMsg = `<div>
+            <strong>Error during execution</strong><br>
+            <strong>Device:</strong> ${device}<br>
+            <strong>Scheme:</strong> ${scheme}<br>
+            <strong>Type:</strong> ${type}<br>
+            <strong>Rounds:</strong> ${rounds}<br>
+            <strong>Details:</strong> ${errorText}
+        </div>`;
+        showToast(`Failed to execute ${scheme} on ${device}`);
+        showResult(device, errorMsg);
+    });
 }
 
 function connect() {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PSI Suite</title>
+  <title>PSI Suite Dashboard</title>
 
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" defer></script>
@@ -16,21 +16,53 @@
   <!-- Local Styles & Scripts -->
   <link href="../static/style.css" rel="stylesheet" />
   <script src="../static/script.js" defer></script>
+
+  <!-- Sidebar Toggle Script -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const menuBtn  = document.getElementById("menu-btn");
+      const sidebar  = document.querySelector(".left-menu");
+      const overlay  = document.getElementById("menu-overlay");
+      const body     = document.body;
+
+      function openSidebar() {
+        sidebar.classList.add("open");
+        overlay.classList.add("visible");
+        body.classList.add("no-scroll");
+      }
+      function closeSidebar() {
+        sidebar.classList.remove("open");
+        overlay.classList.remove("visible");
+        body.classList.remove("no-scroll");
+      }
+
+      menuBtn.addEventListener("click", openSidebar);
+      overlay.addEventListener("click", closeSidebar);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeSidebar();
+      });
+    });
+  </script>
 </head>
 <body>
-  <header>
-    <h1 class="visually-hidden">PSI Suite Dashboard</h1>
+  <header class="main-header blue lighten-1 white-text">
+    <h1 class="dashboard-title center-align">PSI Suite Dashboard</h1>
   </header>
 
-  <div class="row no-gutters">
-    <!-- SIDEBAR -->
-    <aside class="col s12 m3 l2 grey lighten-4 left-menu hide-on-small-only" aria-label="Panel lateral de control">
-      <div class="nav-wrapper">
-        <h2 class="center-align" style="font-size:1.5rem;">PSI Suite</h2>
-        <hr class="divider" aria-hidden="true">
+  <!-- Floating Menu Button (mobile/tablet) -->
+  <button id="menu-btn" class="btn-floating btn-large blue" aria-label="Abrir menú lateral">
+    <i class="material-icons">menu</i>
+  </button>
 
+  <!-- Overlay -->
+  <div id="menu-overlay" aria-hidden="true"></div>
+
+  <div class="main-layout">
+    <!-- SIDEBAR -->
+    <aside class="left-menu grey lighten-4" aria-label="Panel lateral de control">
+      <div class="nav-wrapper">
         <section aria-labelledby="node-info">
-          <h3 id="node-info" class="visually-hidden">Información del nodo</h3>
+          <h3 id="node-info">Información del nodo</h3>
           <ul class="section" role="list">
             <li><span class="details">ID: <strong id="id"></strong></span></li>
             <li><span class="details">Puerto: <strong id="port"></strong></span></li>
@@ -43,30 +75,33 @@
 
         <nav aria-label="Acciones del nodo">
           <ul class="section" role="list">
-            <li><a class="btn-small waves-effect waves-light" href="#" onclick="results()">Datos</a></li>
-            <li><a class="btn-small waves-effect waves-light" href="#" onclick="my_data()">Mi dataset</a></li>
-            <li><a class="btn-small waves-effect waves-light" href="#" onclick="mykeys()">Mis claves</a></li>
-            <li><a class="btn-small waves-effect waves-light" href="#" onclick="genkeys('Paillier','2048')">Nuevas P</a></li>
-            <li><a class="btn-small waves-effect waves-light" href="#" onclick="genkeys('Damgard-Jurik','2048')">Nuevas DJ</a></li>
-            <li><a class="btn-small waves-effect waves-light" href="#" onclick="discover_peers()">Buscar peers</a></li>
-            <li><a id="connect" class="btn-small waves-effect waves-light" href="#" onclick="connect()">Conectar</a></li>
-            <li><a id="disconnect" class="btn-small red waves-effect waves-light" href="#" onclick="disconnect()">Desconectar</a></li>
+            <li><a class="btn waves-effect waves-light blue" href="#" onclick="results()">Datos</a></li>
+            <li><a class="btn waves-effect waves-light blue" href="#" onclick="my_data()">Mi dataset</a></li>
+            <li><a class="btn waves-effect waves-light blue" href="#" onclick="mykeys()">Mis claves</a></li>
+            <li><a class="btn waves-effect waves-light blue" href="#" onclick="genkeys('Paillier','2048')">Nuevas P</a></li>
+            <li><a class="btn waves-effect waves-light blue" href="#" onclick="genkeys('Damgard-Jurik','2048')">Nuevas DJ</a></li>
+            <li><a class="btn waves-effect waves-light blue" href="#" onclick="discover_peers()">Buscar peers</a></li>
+            <li><a id="connect" class="btn waves-effect waves-light green" href="#" onclick="connect()">Conectar</a></li>
+            <li><a id="disconnect" class="btn waves-effect waves-light red darken-2" href="#" onclick="disconnect()">Desconectar</a></li>
           </ul>
         </nav>
       </div>
     </aside>
 
     <!-- MAIN CONTENT -->
-    <main class="col s12 m9 l10 content" id="main-content">
-      <section class="container" aria-labelledby="devicesConnected">
+    <main class="content" id="main-content">
+      <section class="content-section" aria-labelledby="devicesConnected">
         <h2 id="devicesConnected">Dispositivos conectados</h2>
-        <div id="devices" class="row" role="region" aria-live="polite"></div>
-        <p class="guide-text">
-          Elige el criptosistema a usar para calcular la intersección:
-        </p>
+        <div id="devices" aria-live="polite">
+          <div id="devices-intro" class="info-intro">
+            <p class="grey-text text-darken-1">
+              Prueba haciendo clic en <strong>"Buscar peers"</strong> para detectar nodos en la red.
+            </p>
+          </div>
+          <div id="device-cards" class="device-grid" role="region" aria-label="Tarjetas de dispositivos"></div>
+        </div>
       </section>
     </main>
   </div>
-  
 </body>
 </html>

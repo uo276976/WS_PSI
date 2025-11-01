@@ -35,7 +35,7 @@ class Node:
             self.peers = peers  # Lista de peers
             self.context = zmq.Context()  # Contexto de ZMQ
             self.router_socket = self.context.socket(zmq.ROUTER)  # Socket ROUTER
-            self.router_socket.set_hwm(2000) # High Water Mark
+            self.router_socket.set_hwm(2500) # High Water Mark
             self.devices = {}  # Dispositivos conectados
             self.myData = set(random.sample(range(DEFL_DOMAIN), DEFL_SET_SIZE))  # Datos propios
             self.domain = DEFL_DOMAIN  # Dominio de los números aleatorios sobre los que se trabaja
@@ -198,10 +198,32 @@ class Node:
         self.devices[peer]["last_seen"] = day_time
 
     def get_devices(self):
-        return {device: {
-            "last_seen": info["last_seen"],
-            "device_type": info.get("device_type", "Unknown")
-        } for device, info in self.devices.items()}
+        now = time.time()
+        active_timeout = 10
+
+        result = {}
+        for device, info in self.devices.items():
+            last_seen = info.get("last_seen")
+            device_type = info.get("device_type", "Unknown")
+
+            if not last_seen or last_seen is False:
+                active = False
+                last_seen_str = "Nunca conectado"
+            elif isinstance(last_seen, (int, float)):
+                delta = now - last_seen
+                active = delta <= active_timeout
+                last_seen_str = time.strftime("%H:%M:%S", time.localtime(last_seen))
+            else:
+                last_seen_str = last_seen
+                active = True
+
+            result[device] = {
+                "last_seen": last_seen_str,
+                "active": active,
+                "device_type": device_type
+            }
+
+        return result
 
     def ping_device(self, device):
         if device in self.devices:
@@ -217,7 +239,7 @@ class Node:
                     print(f"{device} - Received: {reply}")
 
                     if reply.endswith("is up and running!"):
-                        self.devices[device]["last_seen"] = time.strftime("%H:%M:%S", time.localtime())
+                        self.devices[device]["last_seen"] = time.time()
                         print(f"{device} - Ping OK")
                         return device + " - Ping OK"
                     else:
@@ -241,15 +263,28 @@ class Node:
             self.devices[device]["socket"].send_string(message)
 
     def stop(self):
+        print(f"[{self.id}] Stopping node and cleaning up...")
         self.running = False
-        for device in self.devices:
-            self.devices[device]["socket"].setsockopt(zmq.LINGER, 0)
-            self.devices[device]["socket"].close()
-        self.router_socket.setsockopt(zmq.LINGER, 0)
-        self.router_socket.close()
-        # Terminate the ZMQ context
-        self.context.term()
+
+        try:
+            for device in self.devices.values():
+                sock = device.get("socket")
+                if sock:
+                    sock.setsockopt(zmq.LINGER, 0)
+                    sock.close()
+            self.devices.clear()
+
+            if hasattr(self, "router_socket"):
+                self.router_socket.setsockopt(zmq.LINGER, 0)
+                self.router_socket.close()
+            if hasattr(self, "context"):
+                self.context.term()
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
+        # Fuerza destrucción del singleton
         Node.__instance = None
+        print(f"Node {self.id} destroyed.")
 
     def genkeys(self, scheme, bit_length):
         impl = CryptoImplementation.from_string(scheme)
@@ -357,12 +392,17 @@ class Node:
         return "Setup updated - BFV is generating new keys and parameters in the background"
 
     def check_tasks(self) -> tuple[str, str]:
-        total_node = self.executor.queue.qsize() + self.executor.tasks_in_progress
-        total_handler = self.json_handler.executor.queue.qsize() + self.json_handler.executor.tasks_in_progress
-        return (str(total_node) + " tasks running in the node" if
-                total_node > 0 else "No tasks running in the node",
-                str(total_handler) + " tasks running in the handler"
-                if total_handler > 0 else "No tasks running in the handler")
+        total_node = getattr(self.executor, "tasks_in_progress", 0)
+        total_handler = 0
+        if hasattr(self, "json_handler") and hasattr(self.json_handler, "executor"):
+            total_handler = (
+                self.json_handler.executor.queue.qsize()
+                + self.json_handler.executor.tasks_in_progress
+            )
+        return (
+            f"{total_node} tasks running in the node" if total_node > 0 else "No tasks running in the node",
+            f"{total_handler} tasks running in the handler" if total_handler > 0 else "No tasks running in the handler"
+        )
 
     def send_message(self, peer, message):
         try:

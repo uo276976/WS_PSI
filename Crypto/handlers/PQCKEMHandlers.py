@@ -50,6 +50,10 @@ class KEMHandler(IntersectionHandler):
                 else sk.encode("utf-8") if isinstance(sk, str) else bytes(sk)
             )
             sk_hex = sk_bytes.hex()
+            
+            self._last_key_size_mb = self.measure_mb(sk_hex)
+            self._last_msg_size_mb = 0.0
+            
             # print(f"[{self.scheme_name}Handler] Shared key with {device}: {sk_hex}")
             self.results[f"{self.id}-{device} {self.scheme_name} SharedKey"] = sk_hex
         self.stop_persistent_logging()

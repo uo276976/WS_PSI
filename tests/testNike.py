@@ -11,7 +11,7 @@ from Crypto.handlers.X448Handler import X448Handler
 from Crypto.handlers.RSAHandler import RSAHandler
 
 from Crypto.helpers.PQCKEMHelpers import (
-    KyberHelper, NTRUHelper, BIKEHelper, HQCHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
+    KyberHelper, SNTRUPHelper, BIKEHelper, HQCHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
 )
 from Crypto.helpers.FrodoKEMHelper import FrodoKEMHelper
 from Crypto.helpers.ClassicMcElieceHelper import ClassicMcElieceHelper
@@ -74,20 +74,20 @@ class NikeTests(unittest.TestCase):
     def test_classic_mceliece(self):
         self.run_protocol(ClassicMcElieceHandler, ClassicMcElieceHelper, "ClassicMcEliece")
 
-    def test_ntru(self):
-        self.run_protocol(KEMHandler, NTRUHelper, "NTRU")
+    def test_sntrup(self):
+        self.run_protocol(KEMHandler, SNTRUPHelper, "sntrup761")
 
     def test_bike(self):
-        self.run_protocol(KEMHandler, BIKEHelper, "BIKE")
+        self.run_protocol(KEMHandler, BIKEHelper, "BIKE-L1")
 
     def test_hqc(self):
-        self.run_protocol(KEMHandler, HQCHelper, "HQC")
+        self.run_protocol(KEMHandler, HQCHelper, "HQC-192")
 
     def test_p256(self):
-        self.run_protocol(KEMHandler, P256Helper, "P256")
+        self.run_protocol(KEMHandler, P256Helper, "P-256")
     
     def test_p384(self):
-        self.run_protocol(P384Handler, P384Helper, "P384")
+        self.run_protocol(P384Handler, P384Helper, "P-384")
 
     def test_x25519(self):
         self.run_protocol(KEMHandler, X25519Helper, "X25519")
@@ -96,13 +96,13 @@ class NikeTests(unittest.TestCase):
         self.run_protocol(X448Handler, X448Helper, "X448")
     
     def test_secp256k1(self):
-        self.run_protocol(Secp256k1Handler, Secp256k1Helper, "Secp256k1")
+        self.run_protocol(Secp256k1Handler, Secp256k1Helper, "secp256k1")
         
     def test_rsa(self):
         self.run_protocol(RSAHandler, RSAHelper, "RSA")
 
     def test_hybrid_kyber_x25519(self):
-        self.run_protocol(KEMHandler, HybridKyberX25519Helper, "HybridKyberX25519")
+        self.run_protocol(KEMHandler, HybridKyberX25519Helper, "Hybrid-Kyber-X25519")
 
 
 if __name__ == "__main__":

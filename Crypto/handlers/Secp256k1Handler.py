@@ -23,11 +23,9 @@ class Secp256k1Handler(IntersectionHandler):
         self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
             # print(f"[Secp256k1Handler] Step 2 → computing shared key with {device}")
-            peer_bytes = base64.b64decode(peer_pub_b64)
-            ct, ss = cs.encapsulate(peer_bytes)
+            ct_b64, ss = cs.encapsulate(peer_pub_b64)
             shared_hex = ss.hex()
-            self.results[f"{self.id}-{device} secp256k1 SharedKey"] = shared_hex
-            ct_b64 = cs.get_ciphertext()
+            self.results[f"{self.id}-{device} Secp256k1 SharedKey"] = shared_hex
             size = sys.getsizeof(ct_b64)
             self.send_message(device, ct_b64, cs.imp_name, step="2")
             return 0, size
@@ -38,6 +36,10 @@ class Secp256k1Handler(IntersectionHandler):
             # print(f"[Secp256k1Handler] Step 3 → decapsulating from {device}")
             sk = cs.decapsulate(peer_ct_b64)
             hexkey = sk.hex()
+            
+            self._last_key_size_mb = self.measure_mb(hexkey)
+            self._last_msg_size_mb = 0.0
+            
             self.results[f"{self.id}-{device} secp256k1 SharedKey"] = hexkey
             # print(f"[Secp256k1Handler] Shared key with {device}: {hexkey}")
         self.stop_persistent_logging()

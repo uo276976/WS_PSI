@@ -27,15 +27,16 @@ class CAOPEHandler(IntersectionHandler):
         6. Prints the coefficients being sent.
         7. Sends the coefficients to the device.
         """
-        serialized_pubkey = cs.serialize_public_key()
-        my_data = [int(element) for element in self.my_data]
-        coeffs = polinomio_raices(my_data)
-        encrypted_coeffs = [cs.encrypt(coeff) for coeff in coeffs]
-        encrypted_coeffs = [cs.get_ciphertext(encrypted_coeff) for encrypted_coeff in encrypted_coeffs]
-        self.send_message(device, encrypted_coeffs, (cs.imp_name + ' PSI-CA OPE'), serialized_pubkey)
-        my_data_size = sum(sys.getsizeof(element) for element in my_data)
-        ciphertext_size = sum(sys.getsizeof(element) for element in encrypted_coeffs)
-        return my_data_size, ciphertext_size
+        with with_log_context(self, cs, "FIRST_STEP", device):
+            serialized_pubkey = cs.serialize_public_key()
+            my_data = [int(element) for element in self.my_data]
+            coeffs = polinomio_raices(my_data)
+            encrypted_coeffs = [cs.encrypt(coeff) for coeff in coeffs]
+            encrypted_coeffs = [cs.get_ciphertext(encrypted_coeff) for encrypted_coeff in encrypted_coeffs]
+            self.send_message(device, encrypted_coeffs, (cs.imp_name + ' PSI-CA OPE'), serialized_pubkey)
+            my_data_size = sum(sys.getsizeof(element) for element in my_data)
+            ciphertext_size = sum(sys.getsizeof(element) for element in encrypted_coeffs)
+            return my_data_size, ciphertext_size
 
     def intersection_second_step(self, device, cs, coeffs, pubkey):
         with with_log_context(self, cs, "SECOND_STEP", device):

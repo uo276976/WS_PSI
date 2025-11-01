@@ -51,7 +51,7 @@ class PQKEMHelper:
         self.ciphertext = self._ciphertext
 
 
-class NTRUHelper(PQKEMHelper):
+class SNTRUPHelper(PQKEMHelper):
     def __init__(self):
         super().__init__("sntrup761")
 
@@ -255,16 +255,19 @@ class X25519Helper:
 # Híbrido (Kyber + X25519)
 class HybridKyberX25519Helper:
     """
-    Hybrid KEM: Kyber512 + X25519
-      - Public key is a dict {"pq": <b64 kyber pk>, "xc": <b64 x25519 pk>}
-      - Encapsulation returns a dict ciphertext:
-            {"pq": <b64 kyber ct>, "xc": <b64 x25519 eph-pub>}
-        and a 32-byte shared key = HKDF-SHA256( kyber_ss || x25519_ss )
-      - Decapsulation accepts the same dict and reconstructs the same 32-byte key.
+    Hybrid Post-Quantum NIKE (Kyber512 + X25519)
+    -------------------------------------------------
+    Combina un KEM PQC (Kyber) y un NIKE clásico (X25519)
+    para derivar un secreto compartido robusto ante ataques cuánticos.
 
-    Compatible with generic KEMHandler. It is “fail secure”:
-      - If either branch fails, no key is derived.
-      - No manual size poking into oqs internals; base64 round-trips only.
+    Fórmula:
+        sk = HKDF( ss_kyber || ss_x25519, salt=None, info="hybrid-nike-v1" )
+
+    Propiedades:
+      - Fail-secure: si una rama falla, no se genera clave.
+      - No-interactivo: ambas partes derivan la misma clave sin handshake adicional.
+      - Post-cuántico: Kyber asegura resistencia ante adversarios cuánticos.
+      - Compatible con KEMHandler estándar.
     """
     def __init__(self):
         self.imp_name = "Hybrid-Kyber-X25519"
@@ -274,69 +277,73 @@ class HybridKyberX25519Helper:
             "pq": self.pq.serialize_public_key(),
             "xc": self.xc.serialize_public_key(),
         }
-        self._last_ciphertext = None  # dict
-        self._last_shared_key = None  # bytes
-
-    # public key I/O
+        self._last_ciphertext = None
+        self._last_shared_key = None
 
     def serialize_public_key(self):
-        # Always returns the {pq, xc} dict with b64 strings
         return {
             "pq": self.pq.serialize_public_key(),
             "xc": self.xc.serialize_public_key(),
         }
 
     def decode_public_key(self, d):
-        # Accept as-is if it's a dict with both parts
         if isinstance(d, dict) and "pq" in d and "xc" in d:
             return d
-        # Otherwise let the handler provide the right format in step 2
-        return d
-
-    # KEM ops
+        raise ValueError("Hybrid public key must contain both 'pq' and 'xc' fields")
 
     def encapsulate(self, peer_pubkeys: dict):
-        if not isinstance(peer_pubkeys, dict) or "pq" not in peer_pubkeys or "xc" not in peer_pubkeys:
-            raise ValueError("Hybrid encapsulate() requires dict with 'pq' and 'xc' base64 strings")
+        if not isinstance(peer_pubkeys, dict):
+            raise ValueError("Hybrid encapsulate() requires dict with 'pq' and 'xc'")
 
-        # Kyber: produces ct1(bytes) + ss1(bytes)
-        ct1, ss1 = self.pq.encapsulate(peer_pubkeys["pq"])
+        try:
+            ct1, ss1 = self.pq.encapsulate(peer_pubkeys["pq"])
+            _, ss2 = self.xc.encapsulate(peer_pubkeys["xc"])
+        except Exception as e:
+            raise RuntimeError(f"Encapsulation failed: {e}")
 
-        # X25519: produces eph-pub (as “ciphertext” via get_ciphertext) + ss2(bytes)
-        _, ss2 = self.xc.encapsulate(peer_pubkeys["xc"])
+        # Validate types
+        if not isinstance(ss1, (bytes, bytearray)) or not isinstance(ss2, (bytes, bytearray)):
+            raise TypeError("Both Kyber and X25519 shared secrets must be bytes")
 
-        # Combine with HKDF-SHA256 → 32 bytes
-        combo = ss1 + ss2
-        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"", info=b"hybrid-nike-v1")
-        sk = hkdf.derive(combo)
-
-        ct = {
-            "pq": self.pq.get_ciphertext(),  # b64
-            "xc": self.xc.get_ciphertext(),  # b64
-        }
-        self._last_ciphertext = ct
-        self._last_shared_key = sk
-        return ct, sk
-
-    def decapsulate(self, peer_ciphertext):
-        """
-        Accept the dict {"pq": <b64 kyber ct>, "xc": <b64 ephemeral x25519 pub>} and return bytes(32).
-        """
-        if not isinstance(peer_ciphertext, dict) or "pq" not in peer_ciphertext or "xc" not in peer_ciphertext:
-            raise ValueError("Hybrid decapsulate() requires dict with 'pq' and 'xc' base64 strings")
-
-        ss1 = self.pq.decapsulate(peer_ciphertext["pq"])
-        ss2 = self.xc.decapsulate(peer_ciphertext["xc"])
-
-        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"hybrid-nike-v1")
+        # Derive combined key
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"hybrid-nike-v1"
+        )
         sk = hkdf.derive(ss1 + ss2)
-        return sk
+
+        self._last_ciphertext = {
+            "pq": self.pq.get_ciphertext(),  # base64 string
+            "xc": self.xc.get_ciphertext(),  # base64 string
+        }
+        self._last_shared_key = sk
+        return self._last_ciphertext, sk
+
+    def decapsulate(self, peer_ciphertext: dict):
+        if not isinstance(peer_ciphertext, dict):
+            raise ValueError("Hybrid decapsulate() requires dict with 'pq' and 'xc'")
+
+        try:
+            ss1 = self.pq.decapsulate(peer_ciphertext["pq"])
+            ss2 = self.xc.decapsulate(peer_ciphertext["xc"])
+        except Exception as e:
+            raise RuntimeError(f"Decapsulation failed: {e}")
+
+        if not isinstance(ss1, (bytes, bytearray)) or not isinstance(ss2, (bytes, bytearray)):
+            raise TypeError("Both Kyber and X25519 shared secrets must be bytes")
+
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"hybrid-nike-v1"
+        )
+        return hkdf.derive(ss1 + ss2)
 
     def get_ciphertext(self):
-        # KEMHandler will use this if present
         return self._last_ciphertext
 
     def set_ciphertext(self, ct_dict):
-        # Let KEMHandler set payload before calling decapsulate(self.ciphertext)
         self._last_ciphertext = ct_dict
-        

@@ -38,6 +38,10 @@ class X448Handler(IntersectionHandler):
             # print(f"[X448Handler] Step 3 → decapsulating from {device}")
             ss = cs.decapsulate(peer_eph_pub_b64)
             hexkey = ss.hex()
+
+            self._last_key_size_mb = self.measure_mb(hexkey)
+            self._last_msg_size_mb = 0.0
+
             self.results[f"{self.id}-{device} X448 SharedKey"] = hexkey
             # print(f"[X448Handler] Shared key with {device}: {hexkey}")
         self.stop_persistent_logging()

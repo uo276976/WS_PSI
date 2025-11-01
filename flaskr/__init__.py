@@ -31,9 +31,17 @@ def create_app(test_config=None):
     def create_node(port=DEFL_PORT):
         local_ip = networking.get_local_ip()
 
+        old_node = Node.getinstance()
+        if old_node is not None:
+            try:
+                old_node.stop()
+            except Exception as e:
+                print(f"Warning: old node cleanup failed: {e}")
+
         node = Node(local_ip, port)
         node.start()
         Logs.setup_logs(node.id, len(node.myData), node.domain)
+        return node
 
     create_node()
     print_banner()
@@ -57,10 +65,6 @@ def create_app(test_config=None):
     @app.route('/')
     def index():
         return render_template('index.html')
-
-    @app.route('/metrics')
-    def metrics():
-        return render_template('metrics.html')
 
     @app.route('/api/devices', methods=['GET'])
     @node_wrapper
@@ -170,7 +174,31 @@ def create_app(test_config=None):
     @app.route('/api/results', methods=['GET'])
     @node_wrapper
     def api_result(node):
-        return jsonify({'result': node.results})
+        try:
+            results = getattr(node, "results", {})
+            if not isinstance(results, dict):
+                results = {}
+                
+            if not results:
+                return jsonify({'result': {}, 'message': 'No results available yet'})
+
+            safe_results = {}
+            for key, val in results.items():
+                try:
+                    if isinstance(val, bytes):
+                        val = val.hex()
+                    elif isinstance(val, (set, tuple)):
+                        val = list(val)
+                    elif not isinstance(val, (dict, list, str, int, float, bool, type(None))):
+                        val = str(val)
+                    safe_results[key] = val
+                except Exception:
+                    safe_results[key] = str(val)
+
+            return jsonify({'result': safe_results})
+        except Exception as e:
+            print(f"[API][ERROR] Failed to serialize results: {e}")
+            return jsonify({'error': f'Failed to fetch results: {e}'}), 500
 
     @app.route('/api/genkeys', methods=['POST'])
     @node_wrapper

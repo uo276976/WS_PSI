@@ -52,21 +52,25 @@ class ThreadData:
         self.stop_event = threading.Event()
 
 def get_container_limits():
-    cpu_cores = psutil.cpu_count()
+    cpu_cores = None
     mem_limit_bytes = psutil.virtual_memory().total
+    
     try:
         if os.path.exists("/sys/fs/cgroup/cpu.max"):
             with open("/sys/fs/cgroup/cpu.max") as f:
                 quota, period = f.read().strip().split()
                 if quota != "max":
-                    cpu_cores = round(int(quota) / int(period), 2)
+                    cpu_cores = float(quota) / float(period)
         elif os.path.exists("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"):
             with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as f1, open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as f2:
                 quota, period = int(f1.read()), int(f2.read())
                 if quota > 0:
-                    cpu_cores = round(quota / period, 2)
-    except:
+                    cpu_cores = float(quota) / float(period)
+    except Exception as e:
         pass
+
+    if cpu_cores is None or cpu_cores <= 0:
+        cpu_cores = psutil.cpu_count(logical=False) or 1.0
 
     try:
         if os.path.exists("/sys/fs/cgroup/memory.max"):
@@ -82,7 +86,12 @@ def get_container_limits():
         cpu_cores = float(cpu_env)
     if mem_env:
         mem_limit_bytes = float(mem_env) * 1024 * 1024
-    return {"cpu_cores": max(cpu_cores, 0.25), "memory_mb": round(mem_limit_bytes / (1024**2), 2)}
+
+    cpu_cores = max(cpu_cores, 0.05)
+    return {
+        "cpu_cores": round(cpu_cores, 3),
+        "memory_mb": round(mem_limit_bytes / (1024**2), 2)
+    }
 
 def get_container_memory_usage():
     paths = ["/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"]
@@ -116,8 +125,7 @@ def log_instance_cpu_usage(td: ThreadData):
     while not td.stop_event.is_set():
         try:
             raw = proc.cpu_percent(interval=SAMPLING_INTERVAL)
-            normalized = raw / max(cores, 1e-6)
-            ema = (1 - alpha) * ema + alpha * normalized
+            ema = (1 - alpha) * ema + alpha * raw
 
             # clamp a [0,100]
             if ema < 0.0: ema = 0.0
@@ -264,6 +272,8 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
         "Peak_instance_CPU": f"{thread_data.peak_instance_cpu_usage}%",
         "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage}MB / {profile_mem}MB",
         "Peak_instance_RAM": f"{thread_data.peak_instance_ram_usage}MB / {profile_mem}MB",
+        "msg_size_mb": getattr(thread_data, "msg_size_mb", 0.0),
+        "key_size_mb": getattr(thread_data, "key_size_mb", 0.0),
     }
 
     ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/activities")
@@ -295,7 +305,7 @@ def setup_logs(node_id: str, set_size: int, domain: str, device_type="Unknown"):
 def aggregate_by_scheme():
     """
     Aggregate logs by cryptographic scheme, computing average
-    time, CPU, and RAM per scheme across all nodes and steps.
+    time, CPU, RAM, and message/key sizes per scheme across all nodes and steps.
     This is a lightweight summary — deeper analysis belongs to Analyzer.
     """
     if not default_app:
@@ -319,12 +329,16 @@ def aggregate_by_scheme():
                 cpu = float(entry.get("Avg_instance_CPU", "0").replace("%", ""))
                 ram = float(entry.get("Avg_instance_RAM", "0").split("MB")[0])
                 t = float(entry.get("time", 0))
+                msg_size = float(entry.get("msg_size_mb", 0.0))
+                key_size = float(entry.get("key_size_mb", 0.0))
                 device_type = entry.get("device_type", "Unknown")
                 step = entry.get("step", "Unknown")
                 summary[scheme].append({
                     "time": t,
                     "cpu": cpu,
                     "ram": ram,
+                    "msg_size": msg_size,
+                    "key_size": key_size,
                     "device_type": device_type,
                     "step": step
                 })
@@ -336,6 +350,8 @@ def aggregate_by_scheme():
         avg_time = sum(e["time"] for e in entries) / len(entries)
         avg_cpu = sum(e["cpu"] for e in entries) / len(entries)
         avg_ram = sum(e["ram"] for e in entries) / len(entries)
+        avg_msg = sum(e["msg_size"] for e in entries) / len(entries)
+        avg_key = sum(e["key_size"] for e in entries) / len(entries)
         steps = sorted(set(e["step"] for e in entries))
         devices = sorted(set(e["device_type"] for e in entries))
         results.append({
@@ -343,6 +359,8 @@ def aggregate_by_scheme():
             "avg_time": round(avg_time, 3),
             "avg_cpu": round(avg_cpu, 2),
             "avg_ram": round(avg_ram, 2),
+            "avg_msg_size_mb": round(avg_msg, 6),
+            "avg_key_size_mb": round(avg_key, 6),
             "steps": steps,
             "devices": devices,
             "count": len(entries)

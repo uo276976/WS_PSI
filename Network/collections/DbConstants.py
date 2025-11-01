@@ -1,6 +1,6 @@
 import sys
 
-VERSION = '2.4'
+VERSION = '3.0'
 
 DEFL_DOMAIN = 500
 DEFL_SET_SIZE = 50
@@ -16,19 +16,23 @@ FB_URL = 'https://ws-psi-default-rtdb.europe-west1.firebasedatabase.app/'
 
 
 def print_banner():
+    version_str = f"VERSION: {VERSION}"
+    version_line = f"#     {version_str:<55}#"
+
     banner = f"""
 ###############################################################
 #                                                             #
 #,------.  ,---.  ,--.     ,---.          ,--.  ,--.          #
 #|  .--. ''   .-' |  |    '   .-' ,--.,--.`--',-'  '-. ,---.  #
 #|  '--' |`.  `-. |  |    `.  `-. |  ||  |,--.'-.  .-'| .-. : #
-#|  | --' .-'    ||  |    .-'    |'  ''  '|  |  |  |  \   --. #
+#|  | --' .-'    ||  |    .-'    |'  ''  '|  |  |  |  \\   --.#
 #`--'     `-----' `--'    `-----'  `----' `--'  `--'   `----' #
 #                                                             #
 ###############################################################
-#           PSI Suite - Web Service - Flask API and Interface #
-#           Author: Santiago Arias - github.com/4rius/WS_PSI  #
-#           VERSION: {VERSION}                                      #
+#     PSI Suite - Web Service - Flask API and Interface       #
+#     Authors: Santiago Arias - github.com/4rius/WS_PSI,      #
+#        Alfonso González-Lamuño - github.com/uo276976/WS_PSI #
+{version_line}
 ###############################################################
     """
     print(banner)

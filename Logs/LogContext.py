@@ -35,22 +35,31 @@ def with_log_context(handler, cs, step_name, device=None):
         system_cpu = cpu_after.system - cpu_before.system
         total_cpu_time = user_cpu + system_cpu
 
-        est_by_times = (total_cpu_time / max(duration, 1e-6) / max(cpu_cores, 1e-6)) * 100.0
+        limits = get_container_limits()
+        cpu_quota = max(limits.get("cpu_cores", 1.0), 1e-6)
+        host_cores = max(psutil.cpu_count(logical=True), 1)
+
+        est_by_times = (total_cpu_time / max(duration, 1e-6)) / host_cores * 100.0
 
         sample_interval = max(SAMPLING_INTERVAL, min(0.1, duration * 1.5))
         try:
-            sampled = proc.cpu_percent(interval=sample_interval) / max(cpu_cores, 1e-6)
+            raw_percent = proc.cpu_percent(interval=sample_interval)
         except Exception:
-            sampled = 0.0
+            raw_percent = 0.0
 
-        cpu_percent_est = sampled if duration < 0.05 else (0.5 * est_by_times + 0.5 * sampled)
+        sampled = raw_percent
 
+        cpu_percent_est = 0.5 * est_by_times + 0.5 * sampled
         cpu_percent_est = max(0.0, min(cpu_percent_est, 100.0))
         epsilon = 0.2
-        if 0.0 < cpu_percent_est < epsilon: cpu_percent_est = epsilon
-        if 100.0 - epsilon < cpu_percent_est < 100.0: cpu_percent_est = 100.0 - epsilon
+
+        if 0.0 < cpu_percent_est < epsilon:
+            cpu_percent_est = epsilon
 
         ram_usage_mb = round(proc.memory_info().rss / (1024**2), 2)
+
+        cpu_within_quota = round(cpu_percent_est, 2)
+        cpu_percent_est = cpu_within_quota
 
         if ephemeral:
             if not td.instance_cpu_usage and not td.instance_ram_usage:
@@ -88,6 +97,9 @@ def with_log_context(handler, cs, step_name, device=None):
             elif "DOMAIN" in name_upper: category = "PSI-Domain"
             elif "PSI" in name_upper: category = "PSI"
             else: category = "NIKE"
+
+        td_snapshot.msg_size_mb = getattr(handler, "_last_msg_size_mb", 0.0)
+        td_snapshot.key_size_mb = getattr(handler, "_last_key_size_mb", 0.0)
 
         threading.Thread(
             target=log_activity_to_firebase,

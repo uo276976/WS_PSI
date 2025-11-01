@@ -468,7 +468,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"device\": \"192.168.1.135\",\n    \"scheme\": \"DamgardJurik\",\n    \"type\": \"OPE\",\n    \"rounds\": 10\n}",
+					"raw": "{\n    \"device\": \"192.168.1.135\",\n    \"scheme\": \"Damgard-Jurik\",\n    \"type\": \"OPE\",\n    \"rounds\": 10\n}",
 					"options": {
 						"raw": {
 							"language": "json"

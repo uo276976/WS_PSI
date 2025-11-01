@@ -52,6 +52,9 @@ class RSAHandler(IntersectionHandler):
 
             peer_key = cs.deserialize_public_key(peer_b64)
             shared_key = cs.derive_shared_key(peer_key)
+            
+            self._last_key_size_mb = self.measure_mb(cs.shared_key.hex())
+            self._last_msg_size_mb = 0.0
 
             self.results[f"SharedKey_{device}"] = shared_key
 

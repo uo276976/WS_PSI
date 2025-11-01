@@ -34,6 +34,9 @@ class FrodoKEMHandler(IntersectionHandler):
             cs.shared_key = cs.decapsulate(ciphertext)
             # print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
             
+            self._last_key_size_mb = self.measure_mb(cs.shared_key.hex())
+            self._last_msg_size_mb = 0.0
+            
             self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
         self.stop_persistent_logging()
         return None, None

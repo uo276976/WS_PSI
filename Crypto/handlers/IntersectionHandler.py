@@ -39,10 +39,18 @@ class IntersectionHandler:
             "device_type": device_type,
             "version": getattr(self, "version", None) or "unknown",
         }
+        
+        msg_size_mb = self.measure_mb(msg)
+        key_size_mb = self.measure_mb(peer_pubkey) if peer_pubkey is not None else 0.0
 
-        # Add pubkey if available
+        msg["msg_size_mb"] = msg_size_mb
         if peer_pubkey is not None:
             msg["pubkey"] = peer_pubkey
+            msg["key_size_mb"] = key_size_mb
+
+        # Save for later Firebase logging
+        self._last_msg_size_mb = msg_size_mb
+        self._last_key_size_mb = key_size_mb
 
         # Optional context metadata (if available)
         if hasattr(self, "scheme_name"):
@@ -86,6 +94,25 @@ class IntersectionHandler:
                f"| Avg RAM={self.thread_data.avg_instance_ram_usage}MB")
             print(msg, flush=True)
             self.logging_active = False
+    
+    def measure_mb(self, data):
+        if data is None:
+            return 0.0
+
+        if isinstance(data, bytes):
+            size_bytes = len(data)
+        elif isinstance(data, str):
+            size_bytes = len(data.encode("utf-8"))
+        elif isinstance(data, int):
+            size_bytes = (data.bit_length() + 7) // 8
+        else:
+            try:
+                encoded = json.dumps(data, default=str).encode("utf-8")
+                size_bytes = len(encoded)
+            except Exception:
+                size_bytes = len(str(data).encode("utf-8"))
+
+        return round(size_bytes / (1024 ** 2), 6)
         
     def intersection_first_step(self, device, cs):
         raise NotImplementedError

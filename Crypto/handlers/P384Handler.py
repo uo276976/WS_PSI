@@ -38,6 +38,10 @@ class P384Handler(IntersectionHandler):
             # print(f"[P384Handler] Step 3 → decapsulating from {device}")
             sk = cs.decapsulate(peer_ct_b64)
             hexkey = sk.hex()
+            
+            self._last_key_size_mb = self.measure_mb(hexkey)
+            self._last_msg_size_mb = 0.0
+            
             self.results[f"{self.id}-{device} P-384 SharedKey"] = hexkey
             # print(f"[P384Handler] Shared key with {device}: {hexkey}")
         self.stop_persistent_logging()

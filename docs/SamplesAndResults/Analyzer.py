@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.ticker as mticker
+
+mticker.Locator.MAXTICKS = 500
 
 sns.set(style="whitegrid", font_scale=1.05)
 
@@ -12,6 +15,18 @@ DEVICE_ORDER = ["IoT", "Android", "WS"]
 DEVICE_COLORS = {"IoT": "#2ca02c", "Android": "#ff7f0e", "WS": "#1f77b4"}  # verde, naranja, azul
 LINKS_ORDER = [f"{a} → {b}" for a in DEVICE_ORDER for b in DEVICE_ORDER]
 
+NIKE_SCHEMES = [
+    "Diffie-Hellman", "Diffie-Hellman-8192", "Kyber", "ClassicMcEliece", "FrodoKEM",
+    "sntrup761", "BIKE-L1", "HQC-192", "X25519", "P-256",
+    "Hybrid-Kyber-X25519", "P-384", "secp256k1", "X448", "RSA"
+]
+NON_NIKE_SCHEMES = [
+    "Paillier",
+    "Damgard-Jurik",
+    "CAOPE",
+    "DomainPSI",
+    "BFV",
+]
 
 def parse_cpu(val):
     if isinstance(val, str):
@@ -82,6 +97,11 @@ def analyze_dir(in_dir):
         print("[WARN] No se encontraron actividades válidas.")
         return
 
+    df_all = df.copy()
+
+    # Filter for NIKE-only schemes (for all general plots)
+    df = df[df["scheme"].isin(NIKE_SCHEMES)].copy()
+
     out_dir = os.path.join(in_dir, "analysis")
     os.makedirs(out_dir, exist_ok=True)
     
@@ -125,7 +145,7 @@ def analyze_dir(in_dir):
         plt.ylabel("Algoritmo / Esquema")
         plt.xticks(rotation=45, ha="right")
 
-        ax.yaxis.set_minor_locator(plt.MultipleLocator(1))
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
         ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
 
         plt.tight_layout()
@@ -142,7 +162,7 @@ def analyze_dir(in_dir):
                peak_ram=("peak_ram", "max"))
           .reset_index()
     )
-
+    
     for metric, (title, _) in metrics_cfg.items():
         plt.figure(figsize=(14, 6))
         ax = sns.barplot(
@@ -150,7 +170,7 @@ def analyze_dir(in_dir):
             x="scheme", y=metric,
             hue="device_type",
             hue_order=DEVICE_ORDER,
-            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+            palette=DEVICE_COLORS,
             errorbar=None
         )
 
@@ -159,11 +179,47 @@ def analyze_dir(in_dir):
         plt.ylabel(title)
         plt.xticks(rotation=45, ha="right")
 
-        plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
+        handles, labels = ax.get_legend_handles_labels()
+        if labels:
+            plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
 
-        ax.yaxis.set_minor_locator(plt.MultipleLocator(5))
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
         ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
         ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.5, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"global_{metric}_by_device.png"))
+        plt.close()
+
+    # Métricas de picos (CPU y RAM)
+    for metric, label in [
+        ("peak_cpu", "Pico máximo de CPU (%)"),
+        ("peak_ram", "Pico máximo de RAM (fracción usada)")
+    ]:
+        plt.figure(figsize=(14, 6))
+        ax = sns.barplot(
+            data=dev_summary,
+            x="scheme", y=metric,
+            hue="device_type",
+            hue_order=DEVICE_ORDER,
+            palette=DEVICE_COLORS,
+            errorbar=None
+        )
+
+        plt.title(f"{label} por esquema y tipo de dispositivo")
+        plt.xlabel("Algoritmo / Esquema")
+        plt.ylabel(label)
+        plt.xticks(rotation=45, ha="right")
+
+        handles, labels = ax.get_legend_handles_labels()
+        if labels:
+            plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
+
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
+        plt.ylim(0, 1)
+
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
 
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, f"global_{metric}_by_device.png"))
@@ -177,56 +233,22 @@ def analyze_dir(in_dir):
             data=subset,
             x="device_type", y="time",
             hue="device_type",
-            legend=False,
+            hue_order=DEVICE_ORDER,
+            palette=DEVICE_COLORS,
             order=DEVICE_ORDER,
-            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
             errorbar=None
         )
         plt.title(f"Tiempo promedio del esquema {scheme} por dispositivo")
         plt.xlabel("Tipo de dispositivo")
         plt.ylabel("Tiempo promedio (s)")
 
-        ax.yaxis.set_minor_locator(plt.MultipleLocator(0.01))
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
         ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
         ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
 
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, f"{scheme}_by_device_time.png"))
         plt.close()
-        
-    for metric, label in [
-        ("peak_cpu", "Pico máximo de CPU (%)"),
-        ("peak_ram", "Pico máximo de RAM (fracción usada)")
-    ]:
-        plt.figure(figsize=(14, 6))
-        ax = sns.barplot(
-            data=dev_summary,
-            x="scheme", y=metric,
-            hue="device_type",
-            hue_order=DEVICE_ORDER,
-            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
-            errorbar=None
-        )
-        plt.title(f"{label} por esquema y tipo de dispositivo")
-        plt.xlabel("Algoritmo / Esquema")
-        plt.ylabel(label)
-        plt.xticks(rotation=45, ha="right")
-        plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
-
-        # Grid y líneas menores según métrica
-        if metric == "peak_cpu":
-            ax.yaxis.set_minor_locator(plt.MultipleLocator(5))
-        else:  # peak_ram (fracción 0..1)
-            ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
-            plt.ylim(0, 1)
-
-        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
-        ax.grid(which="minor", axis="y", linestyle=":",  linewidth=0.4, alpha=0.3)
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, f"global_{metric}_by_device.png"))
-        plt.close()
-
         
     # Comparativa promedio vs pico de CPU por dispositivo
     for device in DEVICE_ORDER:
@@ -281,7 +303,7 @@ def analyze_dir(in_dir):
             plt.ylabel("CPU promedio (%)")
             plt.legend(title="Dispositivo", loc="best", frameon=True)
 
-            ax.yaxis.set_minor_locator(plt.MultipleLocator(5))
+            ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
             ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
             ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
             ax.grid(which="major", axis="x", linestyle=":", linewidth=0.4, alpha=0.3)
@@ -306,7 +328,7 @@ def analyze_dir(in_dir):
             plt.ylabel("RAM (fracción usada)")
             plt.legend(title="Dispositivo", loc="best", frameon=True)
 
-            ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
+            ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
             ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
             ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
             ax.grid(which="major", axis="x", linestyle=":", linewidth=0.4, alpha=0.3)
@@ -316,6 +338,82 @@ def analyze_dir(in_dir):
             plt.close()
 
         print(f"[OK] Trazas temporales generadas en {trace_dir}")
+
+    # HISTOGRAMA DE TAMAÑO DE CLAVE POR ALGORITMO 
+    print("[INFO] Generando histograma de tamaño de clave por algoritmo...")
+
+    key_rows = []
+    for path in glob.glob(os.path.join(in_dir, "*.json")):
+        if os.path.basename(os.path.dirname(path)) == "analysis":
+            continue
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            acts = data.get("activities", {})
+            for a in acts.values():
+                scheme = a.get("scheme", "Unknown")
+                key_size = float(a.get("key_size_mb", 0.0))
+                msg_size = float(a.get("msg_size_mb", 0.0))
+                key_rows.append({"scheme": scheme, "key_size_mb": key_size, "msg_size_mb": msg_size})
+        except Exception:
+            continue
+
+    key_df = pd.DataFrame(key_rows)
+    if not key_df.empty:
+        key_summary = (
+            key_df.groupby("scheme")
+            .agg(max_key_size=("key_size_mb", "max"), max_msg_size=("msg_size_mb", "max"))
+            .reset_index()
+        )
+
+        plt.figure(figsize=(10, 6))
+        ax = sns.barplot(
+            data=key_summary.sort_values("max_key_size", ascending=False),
+            x="scheme", y="max_key_size",
+            palette="viridis", errorbar=None
+        )
+
+        # --- Add numeric labels on top of bars ---
+        for p in ax.patches:
+            height = p.get_height()
+            if not np.isnan(height) and height > 0:
+                ax.text(
+                    p.get_x() + p.get_width() / 2,
+                    height + 0.005,  # slightly above bar
+                    f"{height:.3f} MB",
+                    ha="center", va="bottom",
+                    fontsize=9, fontweight="bold", color="black"
+                )
+
+        plt.title("Tamaño máximo de clave por algoritmo (MB)")
+        plt.xlabel("Algoritmo / Esquema")
+        plt.ylabel("Tamaño de clave máximo (MB)")
+        plt.xticks(rotation=45, ha="right")
+
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "key_size_histogram.png"))
+        plt.close()
+
+        # Guardar resumen como JSON
+        key_json_path = os.path.join(out_dir, "key_size_summary.json")
+        key_summary.to_json(key_json_path, orient="records", indent=2)
+        print(f"[OK] Histograma de tamaño de clave generado → {key_json_path}")
+    else:
+        print("[WARN] No se encontraron datos de key_size_mb en los logs.")
+        
+    try:
+        key_json_path = os.path.join(out_dir, "key_size_summary.json")
+        if os.path.exists(key_json_path):
+            key_summary_df = pd.read_json(key_json_path)
+            key_summary_df = key_summary_df[["scheme", "max_key_size"]]
+        else:
+            key_summary_df = pd.DataFrame(columns=["scheme", "max_key_size"])
+    except Exception:
+        key_summary_df = pd.DataFrame(columns=["scheme", "max_key_size"])
 
     # RESUMEN GLOBAL COMPARATIVO POR DEVICE
     global_summary = (
@@ -389,18 +487,22 @@ def analyze_dir(in_dir):
             x="device_type", y=ycol,
             hue="device_type",
             hue_order=DEVICE_ORDER,
-            palette=[DEVICE_COLORS[d] for d in DEVICE_ORDER],
+            palette=DEVICE_COLORS,
+            order=DEVICE_ORDER,
             errorbar=None
         )
         plt.title(title)
         plt.xlabel("Tipo de dispositivo")
         plt.ylabel(ylabel)
-        plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
+        handles, labels = ax.get_legend_handles_labels()
+        if labels:
+            plt.legend(title="Tipo de dispositivo", loc="best", frameon=True)
 
         # Ejes y rejilla
         if ylim:
             plt.ylim(ylim)
-        ax.yaxis.set_minor_locator(plt.MultipleLocator(step))
+            
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
         ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
         ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
 
@@ -433,53 +535,135 @@ def analyze_dir(in_dir):
     plot_device_summary(
         perf_df, "performance_index",
         "Índice de rendimiento general (Tiempo + CPU + RAM)",
-        "Puntuación normalizada (0–1, más alto es mejor)",
+        "Puntuación normalizada (0-1, más alto es mejor)",
         "global_performance_index.png", step=0.1, ylim=(0, 1)
     )
+    
+    # --- NIKE vs Non-NIKE comparative analysis ---
+    print("[INFO] Generando comparativa Non-NIKE vs Media de NIKEs...")
 
-    # Evaluación automática de viabilidad
+    # Build dev_summary_all using full data (before filtering)
+    dev_summary_all = (
+        df_all.groupby(["scheme", "device_type"])
+            .agg(time=("time", "mean"),
+                cpu=("cpu", "mean"),
+                ram=("ram", "mean"))
+            .reset_index()
+    )
+
+    # Compute NIKE mean excluding DH-8192
+    nike_df = dev_summary_all[dev_summary_all["scheme"].isin(NIKE_SCHEMES)]
+    if not nike_df.empty:
+        nike_mean = nike_df.groupby("device_type")[["time", "cpu", "ram"]].mean().reset_index()
+        nike_mean["scheme"] = "NIKE_mean"
+
+        # Merge key sizes if available
+        if 'key_summary_df' in locals() and not key_summary_df.empty:
+            mean_key = key_summary_df[key_summary_df["scheme"].isin(NIKE_SCHEMES)]["max_key_size"].mean()
+            nike_mean["max_key_size"] = mean_key
+        else:
+            nike_mean["max_key_size"] = np.nan
+
+        compare_df = dev_summary_all[dev_summary_all["scheme"].isin(NON_NIKE_SCHEMES)].copy()
+
+        # Add key sizes
+        compare_df = compare_df.merge(key_summary_df, on="scheme", how="left")
+
+        # Append NIKE mean
+        compare_df = pd.concat([compare_df, nike_mean], ignore_index=True)
+
+        # Plot per metric
+        metrics = {
+            "time": "Tiempo promedio (s)",
+            "cpu": "CPU promedio (%)",
+            "ram": "RAM promedio (fracción usada)",
+            "max_key_size": "Tamaño máximo de clave (MB)"
+        }
+
+        for metric, label in metrics.items():
+            plt.figure(figsize=(10, 6))
+            ax = sns.barplot(
+                data=compare_df,
+                x="scheme", y=metric,
+                hue="device_type",
+                hue_order=DEVICE_ORDER,
+                palette=DEVICE_COLORS,
+                errorbar=None
+            )
+
+            plt.title(f"{label} — Non-NIKE vs Media de NIKEs")
+            plt.xlabel("Algoritmo / Esquema")
+            plt.ylabel(label)
+            plt.xticks(rotation=45, ha="right")
+
+            # Highlight NIKE mean in gray
+            for patch, scheme in zip(ax.patches, compare_df["scheme"]):
+                if scheme == "NIKE_mean":
+                    patch.set_facecolor("#AAAAAA")
+
+            ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
+            ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+            ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(out_dir, f"compare_non_nike_vs_nike_{metric}.png"))
+            plt.close()
+
+        print(f"[OK] Comparativas Non-NIKE generadas en {out_dir}")
+    else:
+        print("[WARN] No se encontraron esquemas NIKE para la comparativa.")
+
+
+    by_device_scheme_df = pd.DataFrame(by_device_by_scheme)
+
+    by_device_scheme_df = by_device_scheme_df.merge(
+        key_summary_df,
+        on="scheme",
+        how="left"
+    )
+
     suitability_rules = {
         "IoT": {
             "time": 0.5,
             "cpu": 65,
-            "ram": 0.80
+            "ram": 0.80,
+            "key_size": 0.10   # 100 KB max
         },
-
         "Android": {
             "time": 0.2,
             "cpu": 80,
-            "ram": 0.30
+            "ram": 0.30,
+            "key_size": 0.50   # 500 KB max
         },
-
         "WS": {
             "time": 0.1,
             "cpu": 90,
-            "ram": 0.70
+            "ram": 0.70,
+            "key_size": 5.00   # 5 MB max
         }
     }
 
-    by_device_scheme_df = pd.DataFrame(by_device_by_scheme)
-
     def assess(row):
-        """Evalúa si un esquema es viable en un dispositivo."""
         limits = suitability_rules.get(row["device_type"], {})
         reasons = []
         ok = True
 
-        if "time" in limits:
-            if row["avg_time"] > limits["time"]:
-                ok = False
-                reasons.append(f"Tiempo {row['avg_time']:.3f}s > {limits['time']}s")
+        if "time" in limits and row["avg_time"] > limits["time"]:
+            ok = False
+            reasons.append(f"Tiempo {row['avg_time']:.3f}s > {limits['time']}s")
 
-        if "cpu" in limits:
-            if row["avg_cpu"] > limits["cpu"]:
-                ok = False
-                reasons.append(f"CPU {row['avg_cpu']:.1f}% > {limits['cpu']}%")
+        if "cpu" in limits and row["avg_cpu"] > limits["cpu"]:
+            ok = False
+            reasons.append(f"CPU {row['avg_cpu']:.1f}% > {limits['cpu']}%")
 
-        if "ram" in limits:
-            if row["avg_ram"] > limits["ram"]:
+        if "ram" in limits and row["avg_ram"] > limits["ram"]:
+            ok = False
+            reasons.append(f"RAM {row['avg_ram']:.2f} > {limits['ram']}")
+
+        if "key_size" in limits and not pd.isna(row.get("max_key_size", None)):
+            if row["max_key_size"] > limits["key_size"]:
                 ok = False
-                reasons.append(f"RAM {row['avg_ram']:.2f} > {limits['ram']}")
+                reasons.append(f"Clave {row['max_key_size']:.3f}MB > {limits['key_size']}MB")
 
         verdict = "Viable" if ok else "No viable"
         reason = "; ".join(reasons) if reasons else "Dentro de umbrales esperados"
@@ -488,7 +672,6 @@ def analyze_dir(in_dir):
     suitability_df = by_device_scheme_df.join(by_device_scheme_df.apply(assess, axis=1))
     suitability_out = os.path.join(out_dir, "suitability_table.json")
     suitability_df.to_json(suitability_out, orient="records", indent=2)
-
     suitability_csv = os.path.join(out_dir, "suitability_table.csv")
     suitability_df.to_csv(suitability_csv, index=False)
 

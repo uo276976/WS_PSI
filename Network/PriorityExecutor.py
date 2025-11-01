@@ -30,7 +30,7 @@ class PriorityExecutor:
 
         self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
         self.queue = PriorityQueue()
-        self.max_tasks_in_queue = 2000
+        self.max_tasks_in_queue = 3500
         self.tasks_in_progress = 0
         self._lock = threading.Lock()
         self._shutdown_flag = False

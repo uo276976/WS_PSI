@@ -9,7 +9,26 @@ class CryptoImplementation:
 
     @staticmethod
     def from_string(text):
-        return CryptoImplementation.entries.get(text)
+        if not text:
+            return None
+        text = text.strip()
+
+        impl = CryptoImplementation.entries.get(text)
+        if impl:
+            return impl
+
+        variants = {
+            text.replace("-", "").replace(" ", ""),
+            text.lower(),
+            text.lower().replace("-", "").replace(" ", ""),
+            text.upper(),
+            text.upper().replace("-", "").replace(" ", "")
+        }
+        for v in variants:
+            if v in CryptoImplementation.entries:
+                return CryptoImplementation.entries[v]
+
+        return None
 
     @staticmethod
     def all_schemes():

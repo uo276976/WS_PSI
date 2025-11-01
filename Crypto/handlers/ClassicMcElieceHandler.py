@@ -43,6 +43,8 @@ class ClassicMcElieceHandler(IntersectionHandler):
             cs.decapsulate_shared_key(peer_data)
             derived_key_hex = cs.shared_key.hex()
 
+            self._last_key_size_mb = self.measure_mb(derived_key_hex)
+            self._last_msg_size_mb = 0.0
             self.results[f"{device} ClassicMcEliece SharedKey"] = derived_key_hex
             # print(f"[{self.scheme_name}] Shared key established with {device}: {derived_key_hex}")
 
