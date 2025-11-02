@@ -12,9 +12,8 @@ class KyberHandler(IntersectionHandler):
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             pubkey_b64 = cs.serialize_public_key()
-            size = sys.getsizeof(pubkey_b64)
             self.send_message(device, None, cs.imp_name, peer_pubkey=pubkey_b64, step="1")
-            return 0, size
+            return 0, len(pubkey_b64.encode())
 
     def intersection_second_step(self, device, cs, _, peer_pubkey_b64):
         self.start_persistent_logging()
@@ -28,6 +27,9 @@ class KyberHandler(IntersectionHandler):
 
     def intersection_final_step(self, device, cs, peer_ciphertext_b64):
         with with_log_context(self, cs, "FINAL_STEP", device):
+            if not peer_ciphertext_b64:
+                raise ValueError("Kyber empty ciphertext received in KyberHandler")
+            
             if cs.shared_key is None:
                 ciphertext = base64.b64decode(peer_ciphertext_b64)
                 cs.decapsulate_shared_key(ciphertext)

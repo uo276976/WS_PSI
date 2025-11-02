@@ -1,6 +1,8 @@
 import base64
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.asymmetric import ec
+
 
 class Secp256k1Helper:
     def __init__(self):
@@ -28,13 +30,16 @@ class Secp256k1Helper:
         peer = ec.EllipticCurvePublicKey.from_encoded_point(self.curve, peer_bytes)
 
         shared_secret = self.priv.exchange(ec.ECDH(), peer)
-        digest = hashes.Hash(hashes.SHA256())
-        digest.update(shared_secret)
-        shared_key = digest.finalize()
+        shared_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"ecdh-secp256k1",
+        ).derive(shared_secret)
 
         ct_bytes = self.pub.public_bytes(
             encoding=serialization.Encoding.X962,
-            format=serialization.PublicFormat.UncompressedPoint
+            format=serialization.PublicFormat.UncompressedPoint,
         )
         ct_b64 = base64.b64encode(ct_bytes).decode("utf-8")
 
@@ -46,9 +51,15 @@ class Secp256k1Helper:
         peer = ec.EllipticCurvePublicKey.from_encoded_point(self.curve, ct_bytes)
 
         shared_secret = self.priv.exchange(ec.ECDH(), peer)
-        digest = hashes.Hash(hashes.SHA256())
-        digest.update(shared_secret)
-        return digest.finalize()
+
+        shared_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"ecdh-secp256k1",
+        ).derive(shared_secret)
+
+        return shared_key
 
     def get_ciphertext(self):
         return self._ciphertext

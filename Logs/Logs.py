@@ -233,7 +233,7 @@ def push_temporal_trace(handler_id, td: ThreadData, scheme, step, device_type):
         "scheme": scheme,
         "step": step,
         "device_type": device_type,
-        "uploaded_at": datetime.datetime.utcnow().isoformat() + "Z"
+        "uploaded_at": datetime.datetime.now(datetime.UTC).isoformat() + "Z"
     }
     threading.Thread(target=_push_log_async, args=(ref, data), daemon=True).start()
 
@@ -246,7 +246,7 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
 
     limits = get_container_limits()
     profile_mem = limits["memory_mb"]
-    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    timestamp = datetime.datetime.now(datetime.UTC).isoformat() + "Z"
     
     if thread_data is None:
         print(f"[FIREBASE][WARN] Missing thread_data for {activity_code}, skipping metrics.")

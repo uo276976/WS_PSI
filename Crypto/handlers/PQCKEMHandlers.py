@@ -1,5 +1,6 @@
 import sys
 import base64
+import json
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.LogContext import with_log_context
 
@@ -12,9 +13,16 @@ class KEMHandler(IntersectionHandler):
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             pub = cs.serialize_public_key()
+            
+            # Handle dict (like hybrid schemes)
+            if isinstance(pub, dict):
+                pub_serialized = json.dumps(pub)
+            else:
+                pub_serialized = str(pub)
+                
             # print(f"[DEBUG][{self.scheme_name}] Step 1 sending pubkey to {device}: {pub}")
             self.send_message(device, None, cs.imp_name, pub, step="1")
-            return 0, sys.getsizeof(str(pub))
+            return 0, len(pub_serialized.encode())
 
     def intersection_second_step(self, device, cs, _, peer_pubkey):
         self.start_persistent_logging()
@@ -39,7 +47,7 @@ class KEMHandler(IntersectionHandler):
             else:
                 data = base64.b64encode(ct).decode("utf-8") if isinstance(ct, (bytes, bytearray)) else str(ct)
             self.send_message(device, data, cs.imp_name, step="2")
-            return 0, sys.getsizeof(str(data))
+            return 0, len(str(data).encode())
 
     def intersection_final_step(self, device, cs, peer_data):
         with with_log_context(self, cs, "FINAL_STEP", device):

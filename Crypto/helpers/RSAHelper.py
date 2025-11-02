@@ -1,57 +1,80 @@
-import os
 import base64
-import secrets
-import hashlib
+import os
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+
 
 class RSAHelper:
     """
-    Simplified pure-Python RSA-style NIKE simulation.
-    Deterministic key agreement based on hashed key material.
-    Compatible with the system NIKE interface.
+    Real RSA-based KEM/NIKE hybrid.
+    - Each node generates its RSA keypair.
+    - The peer encrypts a random symmetric key with our public key.
+    - Both sides share the same derived symmetric key.
     """
     def __init__(self, bits=2048):
         self.imp_name = "RSA"
-        self.category = "NIKE"
+        self.category = "KEM"
         self.bits = bits
-        self.private_key = self._random_bytes(bits // 8)
-        self.public_key = self._derive_public_key(self.private_key)
+
+        # Generate RSA keypair
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=self.bits
+        )
+        self.public_key = self.private_key.public_key()
+
         self.shared_key = None
+        self.ciphertext = None
 
-    def _random_bytes(self, n):
-        return secrets.token_bytes(n)
+    def serialize_public_key(self) -> str:
+        pub_bytes = self.public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return base64.b64encode(pub_bytes).decode("utf-8")
 
-    def _derive_public_key(self, private_bytes):
-        """Simulated 'public key' derived from private key."""
-        return hashlib.sha256(private_bytes).digest()
+    def deserialize_public_key(self, b64_pub: str):
+        pub_bytes = base64.b64decode(b64_pub)
+        return serialization.load_pem_public_key(pub_bytes)
 
-    def generate_keys(self, bits=None):
-        """Regenerate keypair (like RSA key generation)."""
-        if bits:
-            self.bits = bits
-        self.private_key = self._random_bytes(self.bits // 8)
-        self.public_key = self._derive_public_key(self.private_key)
-
-    
-    def derive_shared_key(self, peer_public_key_bytes: bytes):
+    def encapsulate(self, peer_public_key):
         """
-        Compute a symmetric shared key (NIKE-style) based only on both public keys.
+        Encapsulate a symmetric key using the peer's public RSA key.
         """
-        keys_ordered = sorted([self.public_key, peer_public_key_bytes])
-        material = b"RSA-NIKE" + keys_ordered[0] + keys_ordered[1]
-        self.shared_key = hashlib.sha256(material).digest()
-        return self.shared_key
+        shared_key = os.urandom(32)  # 256-bit symmetric key
 
+        # Encrypt with RSA-OAEP
+        ciphertext = peer_public_key.encrypt(
+            shared_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
 
-    def serialize_public_key(self):
-        """Return Base64-encoded public key (expected by test harness)."""
-        return base64.b64encode(self.public_key).decode("utf-8")
+        self.shared_key = shared_key
+        self.ciphertext = ciphertext
+        return ciphertext, shared_key
 
-    def deserialize_public_key(self, b64key):
-        """Decode peer’s Base64 public key."""
-        return base64.b64decode(b64key)
+    def decapsulate(self, ciphertext_b64: str):
+        """
+        Decrypt ciphertext to recover shared key.
+        """
+        ciphertext = base64.b64decode(ciphertext_b64)
+        shared_key = self.private_key.decrypt(
+            ciphertext,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        self.shared_key = shared_key
+        return shared_key
 
-    export_public_key = serialize_public_key
-    import_peer_public_key = deserialize_public_key
+    def get_ciphertext(self) -> str:
+        return base64.b64encode(self.ciphertext).decode("utf-8") if self.ciphertext else None
 
-    def get_shared_key(self):
-        return self.shared_key
+    def get_shared_key(self) -> str:
+        return base64.b64encode(self.shared_key).decode("utf-8") if self.shared_key else None

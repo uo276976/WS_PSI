@@ -13,10 +13,9 @@ class P384Handler(IntersectionHandler):
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             pub_b64 = cs.serialize_public_key()
-            size = sys.getsizeof(pub_b64)
             # print(f"[P384Handler] Step 1 → sending public key to {device}")
             self.send_message(device, None, cs.imp_name, pub_b64, step="1")
-            return 0, size
+            return 0, len(pub_b64.encode())
 
     def intersection_second_step(self, device, cs, _, peer_pub_b64):
         """Parte B recibe la pública, genera la clave compartida y envía su propia pública"""

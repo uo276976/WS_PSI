@@ -7,9 +7,8 @@ class DiffieHellmanHandler(IntersectionHandler):
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             my_pub = cs.serialize_public_key()
-            size = sys.getsizeof(str(my_pub))
             self.send_message(device, None, cs.imp_name, my_pub, step="1")
-            return 0, size
+            return 0, len(str(my_pub).encode())
 
     def intersection_second_step(self, device, cs, _, peer_pubkey):
         self.start_persistent_logging()
@@ -18,7 +17,7 @@ class DiffieHellmanHandler(IntersectionHandler):
             cs.compute_shared_key(peer_key)
             your_pub = cs.serialize_public_key()
             self.send_message(device, None, cs.imp_name, your_pub, step="F")
-            return 0, sys.getsizeof(str(your_pub))
+            return 0, len(str(your_pub).encode())
 
     def intersection_final_step(self, device, cs, peer_pubkey):
         with with_log_context(self, cs, "FINAL_STEP", device):

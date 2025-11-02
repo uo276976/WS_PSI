@@ -14,7 +14,7 @@ class ClassicMcElieceHandler(IntersectionHandler):
 
         with with_log_context(self, cs, "FIRST_STEP", device):
             pubkey_b64 = cs.serialize_public_key()
-            size = sys.getsizeof(pubkey_b64)
+            size = len(pubkey_b64.encode())
 
             # print(f"[DEBUG][{self.scheme_name}] Sending public key to {device}: {pubkey_b64[:32]}...")
             self.send_message(device, None, cs.imp_name, peer_pubkey=pubkey_b64, step="1")
@@ -33,7 +33,7 @@ class ClassicMcElieceHandler(IntersectionHandler):
             # print(f"[{self.scheme_name}] Shared key computed with {device}: {hexkey}")
 
             ciphertext_b64 = cs.get_ciphertext()
-            size = sys.getsizeof(ciphertext_b64)
+            size = len(ciphertext_b64.encode())
             self.send_message(device, ciphertext_b64, cs.imp_name, step="2")
 
             return 0, size

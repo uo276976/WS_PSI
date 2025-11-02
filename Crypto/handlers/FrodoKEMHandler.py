@@ -13,15 +13,15 @@ class FrodoKEMHandler(IntersectionHandler):
         with with_log_context(self, cs, "FIRST_STEP", device):
             pubkey = {"public_key": base64.b64encode(cs.public_key).decode("utf-8")}
             self.send_message(device, None, cs.imp_name, pubkey, step="1")
-            return 0, sys.getsizeof(str(pubkey))
+            return 0, len(str(pubkey).encode())
 
     def intersection_second_step(self, device, cs, _, peer_pubkey):
         self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
             peer_key = base64.b64decode(peer_pubkey["public_key"])
-            ct, sk = cs.encapsulate(peer_key)
-            if sk is None:
-                raise RuntimeError("KEM encapsulation failed")
+            ct, _ = cs.encapsulate(peer_key)
+            if ct is None:
+                raise RuntimeError("FrodoKEM encapsulation failed")
             self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
             # print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
             data = base64.b64encode(ct).decode("utf-8")

@@ -1,9 +1,10 @@
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import x25519, ec
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 import base64
 from typing import Union
-from cryptography.hazmat.primitives.asymmetric import x25519, ec
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 import oqs
 
 # PQ KEM base
@@ -85,7 +86,7 @@ class P256Helper:
         self.pub = self.priv.public_key()
         pub_bytes = self.pub.public_bytes(
             encoding=serialization.Encoding.X962,
-            format=serialization.PublicFormat.UncompressedPoint
+            format=serialization.PublicFormat.UncompressedPoint,
         )
         self.public_key = base64.b64encode(pub_bytes).decode("utf-8")
         self._ciphertext = None
@@ -100,20 +101,33 @@ class P256Helper:
     def _ensure_bytes(self, maybe_b64: Union[str, bytes]) -> bytes:
         return base64.b64decode(maybe_b64) if isinstance(maybe_b64, str) else maybe_b64
 
+    def _derive(self, shared_secret: bytes) -> bytes:
+        """Derive uniform 32-byte key from raw ECDH secret."""
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"ecdh-p256-kem",
+        )
+        return hkdf.derive(shared_secret)
+
     def encapsulate(self, peer_pub: Union[str, bytes]):
         peer_bytes = self._ensure_bytes(peer_pub)
         peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), peer_bytes)
-        sk = self.priv.exchange(ec.ECDH(), peer)
+        raw_ss = self.priv.exchange(ec.ECDH(), peer)
+        sk = self._derive(raw_ss)
+
         self._ciphertext = self.pub.public_bytes(
             encoding=serialization.Encoding.X962,
-            format=serialization.PublicFormat.UncompressedPoint
+            format=serialization.PublicFormat.UncompressedPoint,
         )
         return self._ciphertext, sk
 
     def decapsulate(self, ciphertext: Union[str, bytes]):
         ct_bytes = self._ensure_bytes(ciphertext)
         peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), ct_bytes)
-        return self.priv.exchange(ec.ECDH(), peer)
+        raw_ss = self.priv.exchange(ec.ECDH(), peer)
+        return self._derive(raw_ss)
 
     def get_ciphertext(self) -> str:
         return base64.b64encode(self._ciphertext).decode("utf-8")
@@ -139,8 +153,6 @@ class KyberHelper:
         self.shared_key = None
         # print("[Kyber] Key pair generated")
 
-    # Public key
-
     def serialize_public_key(self) -> str:
         return self.public_key
 
@@ -157,7 +169,7 @@ class KyberHelper:
 
     def encapsulate(self, peer_pubkey_b64_or_bytes):
         peer_pub_bytes = self._to_pub_bytes(peer_pubkey_b64_or_bytes)
-        ct, ss = self.kem.encap_secret(peer_pub_bytes)   # both bytes
+        ct, ss = self.kem.encap_secret(peer_pub_bytes)
         self.ciphertext = ct
         self.shared_key = ss
         # print(f"[Kyber] Encapsulation done. Shared key: {ss.hex()}")
@@ -179,12 +191,10 @@ class KyberHelper:
         return base64.b64decode(peer_pubkey_b64)
     
     def compute_shared_key(self, peer_pubkey_bytes: bytes):
-        # Bob calls this
         self.ciphertext, self.shared_key = self.kem.encap_secret(peer_pubkey_bytes)
         # print("[Kyber] Shared key encapsulated")
 
     def decapsulate_shared_key(self, ciphertext: bytes):
-        # Alice calls this
         self.shared_key = self.kem.decap_secret(ciphertext)
         # print("[Kyber] Shared key decapsulated")
 
@@ -205,15 +215,12 @@ class X25519Helper:
         self.imp_name = "X25519"
         self._sk = x25519.X25519PrivateKey.generate()
         self._pk = self._sk.public_key()
-        self._last_ephemeral_pub = None  # bytes
+        self._last_ephemeral_pub = None
         self._last_ss = None
 
     def serialize_public_key(self) -> str:
         return base64.b64encode(
-            self._pk.public_bytes(
-                encoding=Encoding.Raw,
-                format=PublicFormat.Raw
-            )
+            self._pk.public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
         ).decode("utf-8")
 
     def _to_pub_bytes(self, b64_or_bytes):
@@ -224,21 +231,29 @@ class X25519Helper:
             return base64.b64decode(pk_b64)
         return base64.b64decode(b64_or_bytes)
 
+    def _derive(self, shared_secret: bytes) -> bytes:
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"x25519-kem",
+        )
+        return hkdf.derive(shared_secret)
+
     def encapsulate(self, peer_pub_b64_or_bytes):
         peer_pub_bytes = self._to_pub_bytes(peer_pub_b64_or_bytes)
         peer_pub = x25519.X25519PublicKey.from_public_bytes(peer_pub_bytes)
 
         eph_sk = x25519.X25519PrivateKey.generate()
         eph_pk_bytes = eph_sk.public_key().public_bytes(
-            encoding=Encoding.Raw,
-            format=PublicFormat.Raw
+            encoding=Encoding.Raw, format=PublicFormat.Raw
         )
-        ss = eph_sk.exchange(peer_pub)  # bytes
+        raw_ss = eph_sk.exchange(peer_pub)
+        derived = self._derive(raw_ss)
 
-        # We expose the "ciphertext" as the ephemeral public key (b64)
         self._last_ephemeral_pub = eph_pk_bytes
-        self._last_ss = ss
-        return None, ss
+        self._last_ss = derived
+        return None, derived
 
     def get_ciphertext(self) -> str:
         if self._last_ephemeral_pub is None:
@@ -248,8 +263,8 @@ class X25519Helper:
     def decapsulate(self, eph_pub_b64_or_bytes):
         eph_bytes = self._to_pub_bytes(eph_pub_b64_or_bytes)
         eph_pub = x25519.X25519PublicKey.from_public_bytes(eph_bytes)
-        ss = self._sk.exchange(eph_pub)
-        return ss
+        raw_ss = self._sk.exchange(eph_pub)
+        return self._derive(raw_ss)
 
 
 # Híbrido (Kyber + X25519)
@@ -257,17 +272,17 @@ class HybridKyberX25519Helper:
     """
     Hybrid Post-Quantum NIKE (Kyber512 + X25519)
     -------------------------------------------------
-    Combina un KEM PQC (Kyber) y un NIKE clásico (X25519)
-    para derivar un secreto compartido robusto ante ataques cuánticos.
+    Combines a PQ KEM (Kyber) and a classical ECDH (X25519)
+    to derive a quantum-resilient shared secret.
 
-    Fórmula:
-        sk = HKDF( ss_kyber || ss_x25519, salt=None, info="hybrid-nike-v1" )
+    Final key derivation:
+        sk = HKDF( ss_kyber || ss_x25519, salt=None,
+                   info="hybrid-Kyber-X25519-v1" )
 
-    Propiedades:
-      - Fail-secure: si una rama falla, no se genera clave.
-      - No-interactivo: ambas partes derivan la misma clave sin handshake adicional.
-      - Post-cuántico: Kyber asegura resistencia ante adversarios cuánticos.
-      - Compatible con KEMHandler estándar.
+    Properties:
+      - Fail-secure: if either branch fails, no key is derived.
+      - No additional round-trips.
+      - Compatible with generic KEMHandler.
     """
     def __init__(self):
         self.imp_name = "Hybrid-Kyber-X25519"
@@ -287,30 +302,30 @@ class HybridKyberX25519Helper:
         }
 
     def decode_public_key(self, d):
-        if isinstance(d, dict) and "pq" in d and "xc" in d:
-            return d
-        raise ValueError("Hybrid public key must contain both 'pq' and 'xc' fields")
+        if not (isinstance(d, dict) and "pq" in d and "xc" in d):
+            raise ValueError("[Hybrid] Public key must contain both 'pq' and 'xc' fields")
+        return d
 
     def encapsulate(self, peer_pubkeys: dict):
         if not isinstance(peer_pubkeys, dict):
-            raise ValueError("Hybrid encapsulate() requires dict with 'pq' and 'xc'")
+            raise ValueError("[Hybrid] encapsulate() requires dict with 'pq' and 'xc'")
 
         try:
             ct1, ss1 = self.pq.encapsulate(peer_pubkeys["pq"])
             _, ss2 = self.xc.encapsulate(peer_pubkeys["xc"])
         except Exception as e:
-            raise RuntimeError(f"Encapsulation failed: {e}")
+            raise RuntimeError(f"[Hybrid] Encapsulation failed: {e}")
 
         # Validate types
         if not isinstance(ss1, (bytes, bytearray)) or not isinstance(ss2, (bytes, bytearray)):
-            raise TypeError("Both Kyber and X25519 shared secrets must be bytes")
+            raise TypeError("[Hybrid] Both Kyber and X25519 shared secrets must be bytes")
 
         # Derive combined key
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             salt=None,
-            info=b"hybrid-nike-v1"
+            info=f"hybrid-{self.pq.imp_name}-{self.xc.imp_name}".encode(),
         )
         sk = hkdf.derive(ss1 + ss2)
 
@@ -322,28 +337,32 @@ class HybridKyberX25519Helper:
         return self._last_ciphertext, sk
 
     def decapsulate(self, peer_ciphertext: dict):
-        if not isinstance(peer_ciphertext, dict):
-            raise ValueError("Hybrid decapsulate() requires dict with 'pq' and 'xc'")
+        if not (isinstance(peer_ciphertext, dict) and "pq" in peer_ciphertext and "xc" in peer_ciphertext):
+            raise ValueError("[Hybrid] decapsulate() requires dict with 'pq' and 'xc' ciphertexts")
 
         try:
             ss1 = self.pq.decapsulate(peer_ciphertext["pq"])
             ss2 = self.xc.decapsulate(peer_ciphertext["xc"])
         except Exception as e:
-            raise RuntimeError(f"Decapsulation failed: {e}")
+            raise RuntimeError(f"[Hybrid] Decapsulation failed: {e}")
 
         if not isinstance(ss1, (bytes, bytearray)) or not isinstance(ss2, (bytes, bytearray)):
-            raise TypeError("Both Kyber and X25519 shared secrets must be bytes")
+            raise TypeError("[Hybrid] Both Kyber and X25519 shared secrets must be bytes")
 
         hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             salt=None,
-            info=b"hybrid-nike-v1"
+            info=f"hybrid-{self.pq.imp_name}-{self.xc.imp_name}".encode(),
         )
-        return hkdf.derive(ss1 + ss2)
+        sk = hkdf.derive(ss1 + ss2)
+        self._last_shared_key = sk
+        return sk
 
     def get_ciphertext(self):
         return self._last_ciphertext
 
     def set_ciphertext(self, ct_dict):
+        if not isinstance(ct_dict, dict):
+            raise ValueError("[Hybrid] set_ciphertext() requires a dict with 'pq' and 'xc'")
         self._last_ciphertext = ct_dict
