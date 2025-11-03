@@ -306,7 +306,6 @@ def aggregate_by_scheme():
     """
     Aggregate logs by cryptographic scheme, computing average
     time, CPU, RAM, and message/key sizes per scheme across all nodes and steps.
-    This is a lightweight summary — deeper analysis belongs to Analyzer.
     """
     if not default_app:
         print("[FIREBASE] Not connected.")

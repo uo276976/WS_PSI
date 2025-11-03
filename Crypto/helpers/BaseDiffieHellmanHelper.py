@@ -92,7 +92,7 @@ class BaseDiffieHellmanHelper(CSHelper):
         self.generate_keys()
 
     def generate_keys(self):
-        """Generate a random private key and corresponding public key on range [2, p−2]."""
+        """Generate a random private key and corresponding public key on range [2, p-2]."""
         self.private_key = secrets.randbelow(self.p - 2) + 2
         self.public_key = pow(self.g, self.private_key, self.p)
 

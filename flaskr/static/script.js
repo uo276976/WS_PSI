@@ -258,7 +258,6 @@ function updateDevices() {
         currentKeys.delete(key);
       });
 
-      // Remove stale (but delay removal to prevent flicker)
       currentKeys.forEach(staleKey => {
         const cardEl = document.getElementById(`card-${staleKey}`);
         if (cardEl) {
