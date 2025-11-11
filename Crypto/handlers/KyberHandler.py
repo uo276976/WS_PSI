@@ -36,7 +36,6 @@ class KyberHandler(IntersectionHandler):
             hexkey = cs.shared_key.hex()
             
             self._last_key_size_mb = self.measure_mb(hexkey)
-            self._last_msg_size_mb = 0.0
 
             # print(f"[KyberHandler] Shared key with {device}: {hexkey}")
             self.results[f"{device} Kyber SharedKey"] = hexkey

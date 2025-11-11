@@ -70,7 +70,7 @@ RFC3526_GROUPS = {
 
 class BaseDiffieHellmanHelper(CSHelper):
     """
-    Generic Diffie–Hellman helper using authentic RFC 3526 safe primes.
+    Generic Diffie-Hellman helper using authentic RFC 3526 safe primes.
     Provides a realistic, standards-compliant NIKE implementation.
     """
 

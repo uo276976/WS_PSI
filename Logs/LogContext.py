@@ -2,7 +2,7 @@ import time, threading, os, psutil
 from contextlib import contextmanager
 from Logs.Logs import (
     get_container_limits, log_activity_to_firebase, ThreadData, SAMPLING_INTERVAL,
-    start_logging, stop_logging, _aggregate_stats
+    start_logging, stop_logging, _aggregate_stats, push_temporal_trace
 )
 from Network.collections.DbConstants import VERSION
 
@@ -41,9 +41,8 @@ def with_log_context(handler, cs, step_name, device=None):
 
         est_by_times = (total_cpu_time / max(duration, 1e-6)) / host_cores * 100.0
 
-        sample_interval = max(SAMPLING_INTERVAL, min(0.1, duration * 1.5))
         try:
-            raw_percent = proc.cpu_percent(interval=sample_interval)
+            raw_percent = proc.cpu_percent(interval=None)
         except Exception:
             raw_percent = 0.0
 
@@ -98,8 +97,15 @@ def with_log_context(handler, cs, step_name, device=None):
             elif "PSI" in name_upper: category = "PSI"
             else: category = "NIKE"
 
-        td_snapshot.msg_size_mb = getattr(handler, "_last_msg_size_mb", 0.0)
         td_snapshot.key_size_mb = getattr(handler, "_last_key_size_mb", 0.0)
+        
+        push_temporal_trace(
+            handler.id,
+            td_snapshot,
+            scheme_name,
+            step_name,
+            getattr(handler, "device_type", "Unknown")
+        )
 
         threading.Thread(
             target=log_activity_to_firebase,

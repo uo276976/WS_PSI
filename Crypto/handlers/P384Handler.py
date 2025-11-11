@@ -39,7 +39,6 @@ class P384Handler(IntersectionHandler):
             hexkey = sk.hex()
             
             self._last_key_size_mb = self.measure_mb(hexkey)
-            self._last_msg_size_mb = 0.0
             
             self.results[f"{self.id}-{device} P-384 SharedKey"] = hexkey
             # print(f"[P384Handler] Shared key with {device}: {hexkey}")

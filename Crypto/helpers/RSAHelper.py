@@ -6,14 +6,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 
 class RSAHelper:
     """
-    Real RSA-based KEM/NIKE hybrid.
+    Real RSA-based KEM/NIKE.
     - Each node generates its RSA keypair.
     - The peer encrypts a random symmetric key with our public key.
     - Both sides share the same derived symmetric key.
     """
     def __init__(self, bits=2048):
         self.imp_name = "RSA"
-        self.category = "KEM"
+        self.category = "NIKE"
         self.bits = bits
 
         # Generate RSA keypair

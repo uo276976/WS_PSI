@@ -22,21 +22,31 @@ class FrodoKEMHandler(IntersectionHandler):
             ct, _ = cs.encapsulate(peer_key)
             if ct is None:
                 raise RuntimeError("FrodoKEM encapsulation failed")
-            self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
-            # print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
+            key_label = f"{device} FrodoKEM SharedKey"
+            self.results[key_label] = cs.shared_key.hex()
             data = base64.b64encode(ct).decode("utf-8")
             self.send_message(device, data, cs.imp_name, step="2")
             return 0, sys.getsizeof(data)
 
     def intersection_final_step(self, device, cs, peer_data):
         with with_log_context(self, cs, "FINAL_STEP", device):
-            ciphertext = base64.b64decode(peer_data)
-            cs.shared_key = cs.decapsulate(ciphertext)
-            # print(f"[FrodoKEMHandler] Shared key with {device}: {cs.shared_key.hex()}")
-            
+            key_label = f"{device} FrodoKEM SharedKey"
+            if key_label in self.results:
+                self.stop_persistent_logging()
+                return None, None
+
+            if isinstance(peer_data, dict):
+                self.stop_persistent_logging()
+                return None, None
+
+            try:
+                ciphertext = base64.b64decode(peer_data)
+                cs.shared_key = cs.decapsulate(ciphertext)
+            except Exception:
+                self.stop_persistent_logging()
+                return None, None
+
             self._last_key_size_mb = self.measure_mb(cs.shared_key.hex())
-            self._last_msg_size_mb = 0.0
-            
-            self.results[f"{device} FrodoKEM SharedKey"] = cs.shared_key.hex()
+            self.results[key_label] = cs.shared_key.hex()
         self.stop_persistent_logging()
         return None, None

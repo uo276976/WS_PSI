@@ -3,6 +3,7 @@ $(document).ready(function () {
     initializeDashboard();
 });
 
+let isConnected = true;
 const NODE_NOT_CONNECTED = "Node not connected";
 const DEVICE_REFRESH_INTERVAL = 10000;
 const TASK_REFRESH_INTERVAL = 1000;
@@ -10,6 +11,7 @@ const TASK_REFRESH_INTERVAL = 1000;
 function initializeDashboard() {
     getNodeId();
     getNodePort();
+    getDeviceType();
     updateDevices();
     checkConnection();
     refreshTasks();
@@ -39,6 +41,12 @@ function getNodePort() {
     $.get('/api/port')
         .done(data => $('#port').text(data.port))
         .fail(() => showToast("Failed to retrieve port"));
+}
+
+function getDeviceType() {
+    $.get('/api/device_type')
+        .done(data => $('#device_type').text(data.device_type))
+        .fail(() => showToast("Failed to retrieve device_type"));
 }
 
 let knownDevices = {};
@@ -298,7 +306,7 @@ function discover_peers() {
 function pingDevice(device) {
     $.post(`/api/ping/${device}`)
         .done(data => {
-            showToast(data.status);
+            showToast(data.status || data.message || "Ping OK");
             showResult(device, data.status);
         })
         .fail(() => showToast("Ping failed"))
@@ -311,7 +319,7 @@ function testCategory(device, category) {
     const endpoint = `/api/test_${category.toLowerCase()}`;
     $.post(`${endpoint}?device=${device}`)
         .done(data => {
-            showToast(data.status);
+            showToast(data.status || data.message || "Test Started");
             showResult(device, data.status);
         })
         .fail(() => {
@@ -410,6 +418,7 @@ function connect() {
             updateDevices();
             getNodePort();
             getNodeId();
+            getDeviceType();
             $('#connect').prop('disabled', true);
             $('#disconnect').prop('disabled', false);
         })
@@ -419,10 +428,11 @@ function connect() {
 function disconnect() {
     $.post('/api/disconnect')
         .done(data => {
-            showToast(data.status || "Successfully disconnected");
+            showToast(data.status || data.message || "Successfully disconnected");
             updateDevices();
             getNodePort();
             getNodeId();
+            getDeviceType();
             $('#connect').prop('disabled', false);
             $('#disconnect').prop('disabled', true);
         })
@@ -432,11 +442,18 @@ function disconnect() {
 function checkConnection() {
     $.get('/api/check_connection')
         .done(data => {
-            $('#connect').prop('disabled', data.status !== NODE_NOT_CONNECTED);
-            $('#disconnect').prop('disabled', data.status === NODE_NOT_CONNECTED);
+            const connected = data.status !== NODE_NOT_CONNECTED;
+            isConnected = connected;
+
+            $('#connect').prop('disabled', !connected);
+            $('#disconnect').prop('disabled', connected);
         })
-        .fail(() => showToast("Failed to check connection status"));
+        .fail(() => {
+            showToast("Failed to check connection status");
+            isConnected = false;
+        });
 }
+
 
 function refreshTasks() {
     setInterval(() => {
@@ -450,10 +467,25 @@ function refreshTasks() {
 }
 
 function showToast(message) {
+    let msg = message;
+
+    if (typeof message === 'object') {
+        if (message.status) {
+            msg = message.status;
+        } else {
+            try {
+                msg = JSON.stringify(message);
+                if (msg.length > 200) msg = msg.slice(0, 200) + '...';
+            } catch {
+                msg = String(message);
+            }
+        }
+    }
+
     if (typeof M !== 'undefined' && M.toast) {
-        M.toast({ html: message });
+        M.toast({ html: msg });
     } else {
-        console.log(message);
+        console.log(msg);
     }
 }
 

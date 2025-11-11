@@ -312,11 +312,17 @@ class Node:
             "last_seen": last_seen,
             "device_type": device_type
         }
-        print(f"Added {peer} to my network as {device_type}")
+        print(f"Added {peer} to the network as {device_type}")
         return f"Added {peer} to the network"
 
     def discover_peers(self):
         print(f"Node {self.id} (You) - Discovering peers on port {self.port}")
+        
+        if os.getenv("SINGLE_NODE_MODE", "false").lower() == "true":
+            print("Single node mode active.")
+            self.new_peer(self.id, time.strftime("%H:%M:%S", time.localtime()), device_type="UNIQUE")
+            return
+    
         base_ip = ".".join(self.id.split(".")[:-1]) + "."
         for i in range(2, 10):
             ip = f"{base_ip}{i}"

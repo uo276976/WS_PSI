@@ -5,6 +5,7 @@ class FrodoKEMHelper:
     def __init__(self, scheme="FrodoKEM-640-AES"):
         self.imp_name = "FrodoKEM"
         self.scheme = scheme
+        self.category = "NIKE"
         self.kem = oqs.KeyEncapsulation(self.scheme)
         self.public_key = self.kem.generate_keypair()
         self.secret_key = self.kem.export_secret_key()

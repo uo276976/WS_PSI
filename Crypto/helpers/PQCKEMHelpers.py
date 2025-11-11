@@ -12,6 +12,7 @@ class PQKEMHelper:
     """Thin wrapper around liboqs KeyEncapsulation."""
     def __init__(self, alg_name: str):
         self.imp_name = alg_name
+        self.category = "NIKE"
         self.kem = oqs.KeyEncapsulation(alg_name)
         self.public_key_bytes = self.kem.generate_keypair()
         self.secret_key = self.kem.export_secret_key()
@@ -64,24 +65,13 @@ class BIKEHelper(PQKEMHelper):
 
 class HQCHelper(PQKEMHelper):
     def __init__(self):
-        try:
-            super().__init__("HQC-192")
-        except oqs.oqs.MechanismNotEnabledError:
-            # Fallback to any enabled KEM so the test runs instead of crashing
-            fallback = next(iter(oqs.get_enabled_kem_mechanisms()))
-            self.imp_name = "HQC-192"     # keep the name for outward behavior/logs
-            self.kem = oqs.KeyEncapsulation(fallback)
-            self.public_key_bytes = self.kem.generate_keypair()
-            self.secret_key = self.kem.export_secret_key()
-            self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
-            self._ciphertext = None
-            self.ciphertext = None
-
+        super().__init__("HQC-192")
 
 # P-256
 class P256Helper:
     def __init__(self):
         self.imp_name = "P-256"
+        self.category = "NIKE"
         self.priv = ec.generate_private_key(ec.SECP256R1())
         self.pub = self.priv.public_key()
         pub_bytes = self.pub.public_bytes(
@@ -147,6 +137,7 @@ class KyberHelper:
     def __init__(self):
         self.imp_name = "Kyber"
         self.kem = oqs.KeyEncapsulation("Kyber512")
+        self.category = "NIKE"
         self.public_key_bytes = self.kem.generate_keypair()
         self.public_key = base64.b64encode(self.public_key_bytes).decode("utf-8")
         self.ciphertext = None
@@ -160,7 +151,6 @@ class KyberHelper:
         if isinstance(peer_pubkey_b64_or_bytes, (bytes, bytearray)):
             return bytes(peer_pubkey_b64_or_bytes)
         if isinstance(peer_pubkey_b64_or_bytes, dict):
-            # in case a nested style ever appears
             pk_b64 = peer_pubkey_b64_or_bytes.get("public_key") or peer_pubkey_b64_or_bytes.get("pq")
             return base64.b64decode(pk_b64)
         return base64.b64decode(peer_pubkey_b64_or_bytes)
@@ -206,13 +196,14 @@ class KyberHelper:
         return base64.b64encode(self.ciphertext).decode("utf-8")
 
     def set_ciphertext(self, ct_b64: str):
-        # Only for single-KEM flows; Hybrid uses its own setter.
+        # Only for single-KEM flows;
         self.ciphertext = base64.b64decode(ct_b64)
         
 
 class X25519Helper:
     def __init__(self):
         self.imp_name = "X25519"
+        self.category = "NIKE"
         self._sk = x25519.X25519PrivateKey.generate()
         self._pk = self._sk.public_key()
         self._last_ephemeral_pub = None
@@ -286,6 +277,7 @@ class HybridKyberX25519Helper:
     """
     def __init__(self):
         self.imp_name = "Hybrid-Kyber-X25519"
+        self.category = "NIKE"
         self.pq = KyberHelper()
         self.xc = X25519Helper()
         self.public_key = {

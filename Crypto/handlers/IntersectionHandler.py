@@ -1,5 +1,7 @@
 import json
 import time
+import base64
+import binascii
 from Logs.Logs import ThreadData, start_logging, stop_logging
 
 class IntersectionHandler:
@@ -40,16 +42,13 @@ class IntersectionHandler:
             "version": getattr(self, "version", None) or "unknown",
         }
         
-        msg_size_mb = self.measure_mb(msg)
         key_size_mb = self.measure_mb(peer_pubkey) if peer_pubkey is not None else 0.0
 
-        msg["msg_size_mb"] = msg_size_mb
         if peer_pubkey is not None:
             msg["pubkey"] = peer_pubkey
             msg["key_size_mb"] = key_size_mb
 
         # Save for later Firebase logging
-        self._last_msg_size_mb = msg_size_mb
         self._last_key_size_mb = key_size_mb
 
         # Optional context metadata (if available)
@@ -94,24 +93,63 @@ class IntersectionHandler:
                f"| Avg RAM={self.thread_data.avg_instance_ram_usage}MB")
             print(msg, flush=True)
             self.logging_active = False
-    
+
     def measure_mb(self, data):
+        """
+        Calcula el tamaño real (en MB) del contenido binario de una clave o mensaje,
+        intentando descontar el overhead de codificación (Base64, JSON, etc.).
+        """
         if data is None:
             return 0.0
 
-        if isinstance(data, bytes):
-            size_bytes = len(data)
-        elif isinstance(data, str):
-            size_bytes = len(data.encode("utf-8"))
-        elif isinstance(data, int):
-            size_bytes = (data.bit_length() + 7) // 8
-        else:
-            try:
-                encoded = json.dumps(data, default=str).encode("utf-8")
-                size_bytes = len(encoded)
-            except Exception:
+        size_bytes = 0
+
+        try:
+            # Caso 1: bytes reales
+            if isinstance(data, (bytes, bytearray)):
+                size_bytes = len(data)
+
+            # Caso 2: string (Base64 o JSON)
+            elif isinstance(data, str):
+                stripped = data.strip()
+
+                if len(stripped) % 4 == 0:
+                    try:
+                        decoded = base64.b64decode(stripped, validate=True)
+                        size_bytes = len(decoded)
+                    except binascii.Error:
+                        size_bytes = len(stripped.encode("utf-8"))
+                else:
+                    size_bytes = len(stripped.encode("utf-8"))
+
+            # Caso 3: dict o estructura
+            elif isinstance(data, dict):
+                b64_field = None
+                for k, v in data.items():
+                    if any(x in k.lower() for x in ["key", "pub"]):
+                        b64_field = v
+                        break
+                if b64_field:
+                    try:
+                        decoded = base64.b64decode(b64_field, validate=True)
+                        size_bytes = len(decoded)
+                    except Exception:
+                        size_bytes = len(str(b64_field).encode("utf-8"))
+                else:
+                    size_bytes = len(json.dumps(data).encode("utf-8"))
+
+            # Caso 4: enteros
+            elif isinstance(data, int):
+                size_bytes = (data.bit_length() + 7) // 8
+
+            # Caso 5: fallback genérico
+            else:
                 size_bytes = len(str(data).encode("utf-8"))
 
+        except Exception:
+            size_bytes = len(str(data).encode("utf-8"))
+
+        # Convertir a MB
         return round(size_bytes / (1024 ** 2), 6)
         
     def intersection_first_step(self, device, cs):

@@ -5,6 +5,7 @@ class ClassicMcElieceHelper:
     def __init__(self):
         self.imp_name = "ClassicMcEliece"
         self.scheme = "Classic-McEliece-348864"
+        self.category = "NIKE"
         self.shared_key = None
         self.ciphertext = None
         self.public_key = None

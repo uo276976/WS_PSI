@@ -1,3 +1,4 @@
+import sys
 import datetime, os, psutil, threading, time, platform, numpy as np
 from firebase_admin import credentials, db, initialize_app
 from Network.collections.DbConstants import FB_URL
@@ -52,6 +53,12 @@ class ThreadData:
         self.stop_event = threading.Event()
 
 def get_container_limits():
+    if os.getenv("SINGLE_NODE_MODE", "false").lower() == "true":
+        return {
+            "cpu_cores": psutil.cpu_count(logical=True),
+            "memory_mb": round(psutil.virtual_memory().total / (1024**2), 2)
+        }
+        
     cpu_cores = None
     mem_limit_bytes = psutil.virtual_memory().total
     
@@ -216,25 +223,48 @@ def _push_log_async(ref, log):
     try:
         ref.push(log)
         activity = log.get("activity_code")
+        log_id = log.get("id")
+
         if activity:
-            print(f"[FIREBASE] Log pushed: {activity} ({log.get('device_type')}→{log.get('peer_device_type')})")
+            print(f"[FIREBASE] Activity log pushed: {activity} ({log.get('device_type')}→{log.get('peer_device_type')})")
+        elif "set_size" in log:
+            print(f"[FIREBASE] Setup log pushed for {log_id}")
+        elif "timestamps" in log:
+            print(f"[FIREBASE] Temporal trace pushed for {log_id}")
         else:
-            print(f"[FIREBASE] Setup log pushed for {log.get('id')}")
+            print(f"[FIREBASE] Generic log pushed for {log_id}")
     except Exception as e:
         print(f"[FIREBASE][ERROR] Failed to push log: {e}")
         
-        
-def push_temporal_trace(handler_id, td: ThreadData, scheme, step, device_type):
-    ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/traces")
+def push_temporal_trace(handler_id, td: ThreadData, scheme, step, device_type, max_points=10):
+    """
+    Push a compressed trace with at most 10 entries to Firebase.
+    """
+    if "pytest" in sys.modules or "unittest" in sys.modules:
+        print(f"[TRACE][SKIPPED] push_temporal_trace skipped during tests for {handler_id}")
+        return
+    
+    length = min(len(td.timestamps), len(td.instance_cpu_usage), len(td.instance_ram_usage))
+    if length == 0:
+        return
+
+    if length > max_points:
+        indices = np.linspace(0, length - 1, max_points, dtype=int)
+    else:
+        indices = range(length)
+
     data = {
-        "timestamps": td.timestamps[-500:],
-        "cpu": td.instance_cpu_usage[-500:],
-        "ram": td.instance_ram_usage[-500:],
+        "id": handler_id,
+        "timestamps": [td.timestamps[i] for i in indices],
+        "cpu": [td.instance_cpu_usage[i] for i in indices],
+        "ram": [td.instance_ram_usage[i] for i in indices],
         "scheme": scheme,
         "step": step,
         "device_type": device_type,
         "uploaded_at": datetime.datetime.now(datetime.UTC).isoformat() + "Z"
     }
+
+    ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/traces")
     threading.Thread(target=_push_log_async, args=(ref, data), daemon=True).start()
 
 
@@ -246,7 +276,7 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
 
     limits = get_container_limits()
     profile_mem = limits["memory_mb"]
-    timestamp = datetime.datetime.now(datetime.UTC).isoformat() + "Z"
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     
     if thread_data is None:
         print(f"[FIREBASE][WARN] Missing thread_data for {activity_code}, skipping metrics.")
@@ -272,7 +302,6 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
         "Peak_instance_CPU": f"{thread_data.peak_instance_cpu_usage}%",
         "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage}MB / {profile_mem}MB",
         "Peak_instance_RAM": f"{thread_data.peak_instance_ram_usage}MB / {profile_mem}MB",
-        "msg_size_mb": getattr(thread_data, "msg_size_mb", 0.0),
         "key_size_mb": getattr(thread_data, "key_size_mb", 0.0),
     }
 
@@ -328,7 +357,6 @@ def aggregate_by_scheme():
                 cpu = float(entry.get("Avg_instance_CPU", "0").replace("%", ""))
                 ram = float(entry.get("Avg_instance_RAM", "0").split("MB")[0])
                 t = float(entry.get("time", 0))
-                msg_size = float(entry.get("msg_size_mb", 0.0))
                 key_size = float(entry.get("key_size_mb", 0.0))
                 device_type = entry.get("device_type", "Unknown")
                 step = entry.get("step", "Unknown")
@@ -336,7 +364,6 @@ def aggregate_by_scheme():
                     "time": t,
                     "cpu": cpu,
                     "ram": ram,
-                    "msg_size": msg_size,
                     "key_size": key_size,
                     "device_type": device_type,
                     "step": step
@@ -349,7 +376,6 @@ def aggregate_by_scheme():
         avg_time = sum(e["time"] for e in entries) / len(entries)
         avg_cpu = sum(e["cpu"] for e in entries) / len(entries)
         avg_ram = sum(e["ram"] for e in entries) / len(entries)
-        avg_msg = sum(e["msg_size"] for e in entries) / len(entries)
         avg_key = sum(e["key_size"] for e in entries) / len(entries)
         steps = sorted(set(e["step"] for e in entries))
         devices = sorted(set(e["device_type"] for e in entries))
@@ -358,7 +384,6 @@ def aggregate_by_scheme():
             "avg_time": round(avg_time, 3),
             "avg_cpu": round(avg_cpu, 2),
             "avg_ram": round(avg_ram, 2),
-            "avg_msg_size_mb": round(avg_msg, 6),
             "avg_key_size_mb": round(avg_key, 6),
             "steps": steps,
             "devices": devices,

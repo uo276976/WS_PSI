@@ -32,14 +32,25 @@ class X448Handler(IntersectionHandler):
     def intersection_final_step(self, device, cs, peer_eph_pub_b64):
         """Parte A decapsula usando la efímera recibida"""
         with with_log_context(self, cs, "FINAL_STEP", device):
-            # print(f"[X448Handler] Step 3 → decapsulating from {device}")
-            ss = cs.decapsulate(peer_eph_pub_b64)
+            key_label = f"{self.id}-{device} {self.scheme_name} SharedKey"
+            
+            if key_label in self.results:
+                self.stop_persistent_logging()
+                return None, None
+
+            try:
+                ss = cs.decapsulate(peer_eph_pub_b64)
+            except Exception:
+                self.stop_persistent_logging()
+                return None, None
+
+            if not ss:
+                self.stop_persistent_logging()
+                return None, None
+
             hexkey = ss.hex()
-
             self._last_key_size_mb = self.measure_mb(hexkey)
-            self._last_msg_size_mb = 0.0
+            self.results[key_label] = hexkey
 
-            self.results[f"{self.id}-{device} X448 SharedKey"] = hexkey
-            # print(f"[X448Handler] Shared key with {device}: {hexkey}")
         self.stop_persistent_logging()
         return None, None

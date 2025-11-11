@@ -31,23 +31,20 @@ class NikeTests(unittest.TestCase):
         handler_a = handler_cls("Alice", {}, "domain", {}, {}, device_type="TEST")
         handler_b = handler_cls("Bob", {}, "domain", {}, {}, device_type="TEST")
 
-        # Step 1: Alice envía su pubkey
+       # Paso 1: A → B
         _, _ = handler_a.intersection_first_step("Bob", alice)
         pub_a = alice.serialize_public_key()
 
-        # Step 2: Bob responde
+        # Paso 2: B → A
         _, _ = handler_b.intersection_second_step("Alice", bob, None, pub_a)
-        if hasattr(bob, "get_ciphertext"):   # KEM-based
-            ct = bob.get_ciphertext()
-        else:
-            ct = bob.serialize_public_key()
+        ct = bob.get_ciphertext() if hasattr(bob, "get_ciphertext") else bob.serialize_public_key()
 
-        # Step 3: Alice finaliza
+        # Paso 3: A termina
         handler_a.intersection_final_step("Bob", alice, ct)
 
-        # Bob también termina (para algunos esquemas)
-        if isinstance(handler_b, (DiffieHellmanHandler, KyberHandler)):
-            handler_b.intersection_final_step("Alice", bob, pub_a if not hasattr(bob, "get_ciphertext") else ct)
+        # Paso 3: B también termina si aplica
+        if hasattr(handler_b, "intersection_final_step"):
+            handler_b.intersection_final_step("Alice", bob, pub_a)
 
         # Validamos que ambos resultados contengan shared key
         self.assertTrue(handler_a.results, "Alice has no results")

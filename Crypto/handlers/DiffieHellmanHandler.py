@@ -28,7 +28,6 @@ class DiffieHellmanHandler(IntersectionHandler):
             self.results[f"{device} Diffie-Hellman SharedKey"] = hexkey
             
             self._last_key_size_mb = self.measure_mb(hexkey)
-            self._last_msg_size_mb = 0.0
             
             # print(f"[DiffieHellman] Shared derived key with {device}: {hexkey}")
         self.stop_persistent_logging()

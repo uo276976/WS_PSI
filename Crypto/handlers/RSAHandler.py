@@ -1,8 +1,6 @@
-import sys
 import base64
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.LogContext import with_log_context
-
 
 class RSAHandler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results,
@@ -33,7 +31,8 @@ class RSAHandler(IntersectionHandler):
             cs.shared_key = shared_key
 
             shared_hex = shared_key.hex()
-            self.results[f"{self.id}-{device} RSA SharedKey"] = shared_hex
+            key_label = f"{self.id}-{device} RSA SharedKey"
+            self.results[key_label] = shared_hex
 
             ct_b64 = base64.b64encode(ciphertext).decode("utf-8")
             self.send_message(device, ct_b64, cs.imp_name, step="2")
@@ -43,15 +42,27 @@ class RSAHandler(IntersectionHandler):
     def intersection_final_step(self, device, cs, peer_ct_b64):
         """Parte A decapsula y obtiene la misma clave compartida"""
         with with_log_context(self, cs, "FINAL_STEP", device):
-            if not peer_ct_b64:
-                raise ValueError("No ciphertext received for RSAHandler final step")
+            key_label = f"{self.id}-{device} RSA SharedKey"
+            if key_label in self.results:
+                return None, None
 
-            shared_key = cs.decapsulate(peer_ct_b64)
+            try:
+                ct = base64.b64decode(peer_ct_b64)
+            except Exception:
+                return None, None
+
+            key_bytes = cs.private_key.key_size // 8
+            if len(ct) != key_bytes:
+                return None, None
+
+            try:
+                shared_key = cs.decapsulate(peer_ct_b64)
+            except Exception:
+                return None, None
+
             cs.shared_key = shared_key
-
             self._last_key_size_mb = self.measure_mb(shared_key.hex())
-            self._last_msg_size_mb = 0.0
-            self.results[f"{self.id}-{device} RSA SharedKey"] = shared_key.hex()
+            self.results[key_label] = shared_key.hex()
 
         self.stop_persistent_logging()
         return None, None

@@ -5,6 +5,7 @@ from cryptography.hazmat.primitives import serialization
 class P384Helper:
     def __init__(self):
         self.imp_name = "P-384"
+        self.category = "NIKE"
         self.priv = ec.generate_private_key(ec.SECP384R1())
         self.pub = self.priv.public_key()
 

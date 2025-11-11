@@ -3,13 +3,13 @@ import json
 import datetime
 import firebase_admin
 from firebase_admin import credentials, db
-from Analyzer import analyze_dir
+from analyzer import analyze_dir
 
 def connect_firebase():
     if not firebase_admin._apps:
         cred = credentials.Certificate('/home/alfonso/WS_PSI/FirebaseCredentials.json')
         firebase_admin.initialize_app(cred, {
-            'databaseURL': "https://ws-psi-default-rtdb.europe-west1.firebasedatabase.app/"
+            'databaseURL': 'https://ws-psi-default-rtdb.europe-west1.firebasedatabase.app/'
         })
 
 def fetch_all_logs():
@@ -19,6 +19,7 @@ def fetch_all_logs():
 
     ref = db.reference("/logs")
     all_logs = ref.get()
+
     if not all_logs:
         print("[Firebase] No se encontraron logs.")
         return base_dir, []

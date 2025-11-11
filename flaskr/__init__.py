@@ -40,7 +40,7 @@ def create_app(test_config=None):
 
         node = Node(local_ip, port)
         node.start()
-        Logs.setup_logs(node.id, len(node.myData), node.domain)
+        Logs.setup_logs(node.id, len(node.myData), node.domain, device_type=node.device_type)
         return node
 
     create_node()
@@ -91,7 +91,9 @@ def create_app(test_config=None):
     def api_port(node):
         if not node.running:
             return jsonify({'port': "Not connected to the network"})
-        return jsonify({'port': node.port})
+        
+        external_port = os.getenv("EXTERNAL_PORT", node.port)
+        return jsonify({'port': external_port})
 
     @app.route('/api/disconnect', methods=['POST'])
     @node_wrapper
@@ -281,7 +283,7 @@ def create_app(test_config=None):
             return jsonify({'status': 'Invalid parameters'})
         res = node.update_setup(domain, set_size)
         if res == "Setup updated":
-            Logs.setup_logs(node.id, set_size, domain)
+            Logs.setup_logs(node.id, set_size, domain, device_type=node.device_type)
         return jsonify({'status': res})
 
     @app.route('/api/check_connection', methods=['GET'])

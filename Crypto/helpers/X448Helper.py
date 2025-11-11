@@ -12,6 +12,7 @@ class X448Helper:
     """
     def __init__(self):
         self.imp_name = "X448"
+        self.category = "NIKE"
         self._sk = x448.X448PrivateKey.generate()
         self._pk = self._sk.public_key()
         self._last_ephemeral_pub = None
@@ -19,11 +20,11 @@ class X448Helper:
 
     def _derive_key(self, raw_ss: bytes) -> bytes:
         """
-        Apply HKDF-SHA512 to the raw shared secret.
+        Apply HKDF-SHA256 to the raw shared secret.
         Returns a 32-byte derived key.
         """
         hkdf = HKDF(
-            algorithm=hashes.SHA512(),
+            algorithm=hashes.SHA256(),
             length=32,
             salt=None,
             info=b"psi-nike-x448",

@@ -35,7 +35,6 @@ class Secp256k1Handler(IntersectionHandler):
             hexkey = sk.hex()
             
             self._last_key_size_mb = self.measure_mb(hexkey)
-            self._last_msg_size_mb = 0.0
             
             self.results[f"{self.id}-{device} secp256k1 SharedKey"] = hexkey
             # print(f"[Secp256k1Handler] Shared key with {device}: {hexkey}")

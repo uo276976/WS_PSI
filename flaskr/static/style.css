@@ -165,6 +165,7 @@ html { font-size: 16px; }
 .iot-device { border-left: 5px solid #4CAF50; }
 .android-device { border-left: 5px solid #FF9800; }
 .ws-device { border-left: 5px solid #2196F3; }
+.unique-device {border-left: 5px solid #9467bd; }
 
 /* Small devices */
 @media (max-width: 600px) {
