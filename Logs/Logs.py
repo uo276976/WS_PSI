@@ -53,7 +53,7 @@ class ThreadData:
         self.stop_event = threading.Event()
 
 def get_container_limits():
-    if os.getenv("SINGLE_NODE_MODE", "false").lower() == "true":
+    if os.getenv("UNIQUE_NODE_MODE", "false").lower() == "true":
         return {
             "cpu_cores": psutil.cpu_count(logical=True),
             "memory_mb": round(psutil.virtual_memory().total / (1024**2), 2)
@@ -303,6 +303,7 @@ def log_activity_to_firebase(thread_data, activity_code, duration, version, hand
         "Avg_instance_RAM": f"{thread_data.avg_instance_ram_usage}MB / {profile_mem}MB",
         "Peak_instance_RAM": f"{thread_data.peak_instance_ram_usage}MB / {profile_mem}MB",
         "key_size_mb": getattr(thread_data, "key_size_mb", 0.0),
+        "ciphertext_size_mb": getattr(thread_data, "ciphertext_size_mb", 0.0),
     }
 
     ref = db.reference(f"/logs/{handler_id.replace('.', '-')}/activities")
@@ -358,6 +359,7 @@ def aggregate_by_scheme():
                 ram = float(entry.get("Avg_instance_RAM", "0").split("MB")[0])
                 t = float(entry.get("time", 0))
                 key_size = float(entry.get("key_size_mb", 0.0))
+                ciphertext_size = float(entry.get("ciphertext_size_mb", 0.0))
                 device_type = entry.get("device_type", "Unknown")
                 step = entry.get("step", "Unknown")
                 summary[scheme].append({
@@ -365,6 +367,7 @@ def aggregate_by_scheme():
                     "cpu": cpu,
                     "ram": ram,
                     "key_size": key_size,
+                    "ciphertext_size": ciphertext_size,
                     "device_type": device_type,
                     "step": step
                 })
@@ -377,6 +380,7 @@ def aggregate_by_scheme():
         avg_cpu = sum(e["cpu"] for e in entries) / len(entries)
         avg_ram = sum(e["ram"] for e in entries) / len(entries)
         avg_key = sum(e["key_size"] for e in entries) / len(entries)
+        avg_ciphertext = sum(e["ciphertext_size"] for e in entries) / len(entries)
         steps = sorted(set(e["step"] for e in entries))
         devices = sorted(set(e["device_type"] for e in entries))
         results.append({
@@ -385,6 +389,7 @@ def aggregate_by_scheme():
             "avg_cpu": round(avg_cpu, 2),
             "avg_ram": round(avg_ram, 2),
             "avg_key_size_mb": round(avg_key, 6),
+            "avg_ciphertext_size_mb": round(avg_ciphertext, 6),
             "steps": steps,
             "devices": devices,
             "count": len(entries)

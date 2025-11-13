@@ -9,6 +9,7 @@ from Crypto.handlers.KyberHandler import KyberHandler
 from Crypto.handlers.FrodoKEMHandler import FrodoKEMHandler
 from Crypto.handlers.ClassicMcElieceHandler import ClassicMcElieceHandler
 from Crypto.handlers.PQCKEMHandlers import KEMHandler
+from Crypto.handlers.HybridKEMHandler import HybridKEMHandler
 from Crypto.handlers.P384Handler import P384Handler
 from Crypto.handlers.Secp256k1Handler import Secp256k1Handler
 from Crypto.handlers.X448Handler import X448Handler
@@ -78,6 +79,7 @@ class JSONHandler:
         self.Secp256k1Handler = Secp256k1Handler(id, my_data, domain, devices, results, device_type=self.device_type)
         self.X448Handler = X448Handler(id, my_data, domain, devices, results, device_type=self.device_type)
         self.RSAHandler = RSAHandler(id, my_data, domain, devices, results, device_type=self.device_type)
+        self.HybridKEMHandler = HybridKEMHandler(id, my_data, domain, devices, results, device_type=self.device_type)
 
         # KEM genérico
         self.KEMHandlers = {
@@ -86,7 +88,6 @@ class JSONHandler:
             "sntrup761": KEMHandler(id, my_data, domain, devices, results, "sntrup761", device_type=self.device_type),
             "P-256": KEMHandler(id, my_data, domain, devices, results, "P-256", device_type=self.device_type),
             "X25519": KEMHandler(id, my_data, domain, devices, results, "X25519", device_type=self.device_type),
-            "Hybrid-Kyber-X25519": KEMHandler(id, my_data, domain, devices, results, "Hybrid-Kyber-X25519", device_type=self.device_type),
         }
 
         # NIKEHandlers indexados por nombre
@@ -100,7 +101,7 @@ class JSONHandler:
             "sntrup761": self.KEMHandlers["sntrup761"],
             "P-256": self.KEMHandlers["P-256"],
             "X25519": self.KEMHandlers["X25519"],
-            "Hybrid-Kyber-X25519": self.KEMHandlers["Hybrid-Kyber-X25519"],
+            "Hybrid-Kyber-X25519": self.HybridKEMHandler,
             "Diffie-Hellman-8192": self.DiffieHellmanHandler,
             "P-384": self.P384Handler,
             "secp256k1": self.Secp256k1Handler,

@@ -1,4 +1,3 @@
-import sys
 from Logs import Logs
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Network.collections.DbConstants import VERSION
@@ -9,7 +8,7 @@ class CAOPEHandler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):
         super().__init__(id, my_data, domain, devices, results, device_type)
         self.category = "PSI-CA"
-        
+
     def intersection_first_step(self, device, cs):
         """
         This method performs the first step of the intersection operation using Oblivious Polynomial Evaluation (OPE)
@@ -28,33 +27,46 @@ class CAOPEHandler(IntersectionHandler):
         7. Sends the coefficients to the device.
         """
         with with_log_context(self, cs, "FIRST_STEP", device):
-            serialized_pubkey = cs.serialize_public_key()
-            my_data = [int(element) for element in self.my_data]
+            pubkey_b64 = cs.serialize_public_key()
+            my_data = [int(x) for x in self.my_data]
+
             coeffs = polinomio_raices(my_data)
-            encrypted_coeffs = [cs.encrypt(coeff) for coeff in coeffs]
-            encrypted_coeffs = [cs.get_ciphertext(encrypted_coeff) for encrypted_coeff in encrypted_coeffs]
-            self.send_message(device, encrypted_coeffs, (cs.imp_name + ' PSI-CA OPE'), serialized_pubkey)
-            my_data_size = sum(sys.getsizeof(element) for element in my_data)
-            ciphertext_size = sum(sys.getsizeof(element) for element in encrypted_coeffs)
-            return my_data_size, ciphertext_size
+            encrypted_coeffs = [cs.encrypt(c) for c in coeffs]
+            encrypted_coeffs = [cs.get_ciphertext(c) for c in encrypted_coeffs]
+
+            self.send_message(device, encrypted_coeffs, f"{cs.imp_name} PSI-CA OPE", pubkey_b64)
+        return None, None
 
     def intersection_second_step(self, device, cs, coeffs, pubkey):
+        """
+        Segundo paso:
+        - Evalúa los polinomios cifrados y devuelve los resultados cifrados.
+        """
+        self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
-            my_data = [int(element) for element in self.my_data]
+            my_data = [int(x) for x in self.my_data]
             pubkey = cs.reconstruct_public_key(pubkey)
+
             coeffs = cs.get_encrypted_list(coeffs, pubkey)
             result = cs.get_evaluations(coeffs, pubkey, my_data)
             serialized_result = cs.serialize_result(result, "OPE")
-            self.send_message(device, serialized_result, cs.imp_name + ' PSI-CA OPE')
-            ciphertext_size = sum(sys.getsizeof(element) for element in serialized_result)
-            return None, ciphertext_size
+
+            self.send_message(device, serialized_result, f"{cs.imp_name} PSI-CA OPE")
+        self.stop_persistent_logging()
+        return None, None
 
     def intersection_final_step(self, device, cs, peer_data):
+        """
+        Paso final:
+        - Desencripta los resultados y calcula la cardinalidad (intersección).
+        """
         with with_log_context(self, cs, "FINAL_STEP", device):
             result = cs.get_encrypted_list(peer_data)
-            result = [int(cs.decrypt(encrypted_value)) for encrypted_value in result]
-            cardinality = sum([int(element == 0) for element in result])
-            self.results[device + " " + cs.imp_name + ' PSI-CA_OPE'] = cardinality
-            Logs.log_result((cs.imp_name + '_PSI-CA_OPE'), cardinality, VERSION, self.id, device)
-            print(f"Cardinality calculation with {device} - {cs.imp_name} PSI-CA OPE - Result: {cardinality}")
-            return None, None
+            result = [int(cs.decrypt(v)) for v in result]
+            cardinality = sum(int(x == 0) for x in result)
+
+            self.results[f"{device} {cs.imp_name} PSI-CA_OPE"] = cardinality
+            Logs.log_result(f"{cs.imp_name}_PSI-CA_OPE", cardinality, VERSION, self.id, device)
+            print(f"Cardinality with {device} - {cs.imp_name} PSI-CA OPE - Result: {cardinality}")
+        self.stop_persistent_logging()
+        return None, None

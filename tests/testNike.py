@@ -9,6 +9,7 @@ from Crypto.handlers.P384Handler import P384Handler
 from Crypto.handlers.Secp256k1Handler import Secp256k1Handler
 from Crypto.handlers.X448Handler import X448Handler
 from Crypto.handlers.RSAHandler import RSAHandler
+from Crypto.handlers.HybridKEMHandler import HybridKEMHandler
 
 from Crypto.helpers.PQCKEMHelpers import (
     KyberHelper, SNTRUPHelper, BIKEHelper, HQCHelper, P256Helper, X25519Helper, HybridKyberX25519Helper
@@ -99,7 +100,7 @@ class NikeTests(unittest.TestCase):
         self.run_protocol(RSAHandler, RSAHelper, "RSA")
 
     def test_hybrid_kyber_x25519(self):
-        self.run_protocol(KEMHandler, HybridKyberX25519Helper, "Hybrid-Kyber-X25519")
+        self.run_protocol(HybridKEMHandler, HybridKyberX25519Helper, "Hybrid-Kyber-X25519")
 
 
 if __name__ == "__main__":

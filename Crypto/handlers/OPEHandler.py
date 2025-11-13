@@ -1,4 +1,3 @@
-import sys
 from Logs import Logs
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Network.collections.DbConstants import VERSION
@@ -28,33 +27,41 @@ class OPEHandler(IntersectionHandler):
         7. Sends the coefficients to the device.
         """
         with with_log_context(self, cs, "FIRST_STEP", device):
-            serialized_pubkey = cs.serialize_public_key()
-            my_data = [int(element) for element in self.my_data]
+            pubkey_b64 = cs.serialize_public_key()
+            my_data = [int(x) for x in self.my_data]
+
             coeffs = polinomio_raices(my_data, cs=cs.imp_name)
-            encrypted_coeffs = [cs.encrypt(coeff) for coeff in coeffs]
-            encrypted_coeffs = [cs.get_ciphertext(enc) for enc in encrypted_coeffs]
-            self.send_message(device, encrypted_coeffs, (cs.imp_name + ' OPE'), serialized_pubkey)
-            my_data_size = sum(sys.getsizeof(e) for e in my_data)
-            ciphertext_size = sum(sys.getsizeof(e) for e in encrypted_coeffs)
-            return my_data_size, ciphertext_size
+            enc_coeffs = [cs.encrypt(c) for c in coeffs]
+            enc_coeffs = [cs.get_ciphertext(e) for e in enc_coeffs]
+
+            self.send_message(device, enc_coeffs, f"{cs.imp_name} OPE", pubkey_b64)
+        return None, None
 
     def intersection_second_step(self, device, cs, coeffs, pubkey):
+        """
+        Paso 2: reconstruye PK, evalúa polinomio cifrado y envía resultados cifrados.
+        """
         with with_log_context(self, cs, "SECOND_STEP", device):
-            my_data = [int(element) for element in self.my_data]
+            my_data = [int(x) for x in self.my_data]
             pubkey = cs.reconstruct_public_key(pubkey)
+
             coeffs = cs.get_encrypted_list(coeffs, pubkey)
-            encrypted_evaluated_coeffs = cs.eval_coefficients(coeffs, pubkey, my_data)
-            serialized_encrypted_evaluated_coeffs = cs.serialize_result(encrypted_evaluated_coeffs, "OPE")
-            self.send_message(device, serialized_encrypted_evaluated_coeffs, cs.imp_name + ' OPE')
-            ciphertext_size = sum(sys.getsizeof(element) for element in serialized_encrypted_evaluated_coeffs)
-            return None, ciphertext_size
+            eval_enc = cs.eval_coefficients(coeffs, pubkey, my_data)
+            serialized = cs.serialize_result(eval_enc, "OPE")
+
+            self.send_message(device, serialized, f"{cs.imp_name} OPE")
+        return None, None
 
     def intersection_final_step(self, device, cs, peer_data):
+        """
+        Paso final: desencripta y devuelve intersección.
+        """
         with with_log_context(self, cs, "FINAL_STEP", device):
             result = cs.get_encrypted_list(peer_data)
-            result = [int(cs.decrypt(encrypted_value)) for encrypted_value in result]
-            result_formatted = [element for element in result if element in self.my_data]
-            self.results[device + " " + cs.imp_name + ' OPE'] = result_formatted
+            result = [int(cs.decrypt(v)) for v in result]
+            result_formatted = [e for e in result if e in self.my_data]
+
+            self.results[f"{device} {cs.imp_name} OPE"] = result_formatted
             Logs.log_result(cs.imp_name + '_OPE', result_formatted, VERSION, self.id, device)
             print(f"Intersection with {device} - {cs.imp_name} OPE - Result: {result_formatted}")
-            return None, None
+        return None, None

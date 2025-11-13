@@ -1,4 +1,3 @@
-import sys
 import base64
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.LogContext import with_log_context
@@ -13,27 +12,25 @@ class X448Handler(IntersectionHandler):
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
             pub_b64 = cs.serialize_public_key()
-            # print(f"[X448Handler] Step 1 → sending public key to {device}")
             self.send_message(device, None, cs.imp_name, pub_b64, step="1")
-            return 0, len(pub_b64.encode())
+        return None, None
 
     def intersection_second_step(self, device, cs, _, peer_pub_b64):
         """Parte B encapsula la clave y envía su pública efímera"""
         self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
-            # print(f"[X448Handler] Step 2 → computing shared key with {device}")
             _, ss = cs.encapsulate(peer_pub_b64)
-            shared_hex = ss.hex()
-            self.results[f"{self.id}-{device} X448 SharedKey"] = shared_hex
+            self.results[f"{self.id}-{device} X448 SharedKey"] = ss.hex()
             eph_pub_b64 = cs.get_ciphertext()
             self.send_message(device, eph_pub_b64, cs.imp_name, step="2")
-            return 0, len(eph_pub_b64)
+        self.stop_persistent_logging()
+        return None, None
 
     def intersection_final_step(self, device, cs, peer_eph_pub_b64):
         """Parte A decapsula usando la efímera recibida"""
+        self.start_persistent_logging()
         with with_log_context(self, cs, "FINAL_STEP", device):
             key_label = f"{self.id}-{device} {self.scheme_name} SharedKey"
-            
             if key_label in self.results:
                 self.stop_persistent_logging()
                 return None, None
@@ -48,9 +45,6 @@ class X448Handler(IntersectionHandler):
                 self.stop_persistent_logging()
                 return None, None
 
-            hexkey = ss.hex()
-            self._last_key_size_mb = self.measure_mb(hexkey)
-            self.results[key_label] = hexkey
-
+            self.results[key_label] = ss.hex()
         self.stop_persistent_logging()
         return None, None

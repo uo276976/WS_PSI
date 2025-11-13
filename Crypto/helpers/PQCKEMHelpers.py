@@ -256,6 +256,9 @@ class X25519Helper:
         eph_pub = x25519.X25519PublicKey.from_public_bytes(eph_bytes)
         raw_ss = self._sk.exchange(eph_pub)
         return self._derive(raw_ss)
+    
+    def decode_public_key(self, data):
+        return data
 
 
 # Híbrido (Kyber + X25519)

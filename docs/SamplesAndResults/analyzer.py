@@ -78,7 +78,8 @@ def _collect_rows(node_json):
                 "peak_cpu": parse_cpu(a.get("Peak_instance_CPU", 0.0)),
                 "peak_ram": parse_ram_fraction(a.get("Peak_instance_RAM", "0MB / 1MB")),
                 "timestamp": a.get("timestamp", None),
-                "key_size_mb": float(a.get("key_size_mb", 0.0))
+                "key_size_mb": float(a.get("key_size_mb", 0.0)),
+                "ciphertext_size_mb": float(a.get("ciphertext_size_mb", 0.0))
             })
         except Exception:
             continue
@@ -454,6 +455,55 @@ def analyze_dir(in_dir):
             key_summary_df = pd.DataFrame(columns=["scheme", "max_key_size"])
     except Exception:
         key_summary_df = pd.DataFrame(columns=["scheme", "max_key_size"])
+        
+    # HISTOGRAMA DE TAMAÑO DE CIPHERTEXT POR ALGORITMO
+    print("[INFO] Generando histograma de tamaño de ciphertext por algoritmo...")
+
+    # Ciphertext size summary directamente del DataFrame
+    ct_summary_df = (
+        df[df["ciphertext_size_mb"] > 0]
+        .groupby("scheme")
+        .agg(max_ciphertext_size=("ciphertext_size_mb", "max"))
+        .reset_index()
+    )
+
+    if not ct_summary_df.empty:
+        plt.figure(figsize=(10, 6))
+        ax = sns.barplot(
+            data=ct_summary_df.sort_values("max_ciphertext_size", ascending=False),
+            x="scheme", y="max_ciphertext_size",
+            palette="magma", errorbar=None
+        )
+
+        plt.title("Tamaño máximo de ciphertext por algoritmo (MB)")
+        plt.xlabel("Algoritmo / Esquema")
+        plt.ylabel("Tamaño de ciphertext máximo (MB)")
+        plt.xticks(rotation=45, ha="right")
+        ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
+        ax.grid(which="major", axis="y", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.grid(which="minor", axis="y", linestyle=":", linewidth=0.4, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "ciphertext_size_histogram.png"))
+        plt.close()
+
+        # Guardar resumen en JSON
+        ct_summary_path = os.path.join(out_dir, "ciphertext_size_summary.json")
+        ct_summary_df.to_json(ct_summary_path, orient="records", indent=2)
+        print(f"[OK] Histograma de tamaño de ciphertext generado → {ct_summary_path}")
+    else:
+        print("[WARN] No se encontraron datos de ciphertext_size_mb en los logs.")
+
+    # Carga de resultados para uso posterior
+    try:
+        ct_json_path = os.path.join(out_dir, "ciphertext_size_summary.json")
+        if os.path.exists(ct_json_path):
+            ct_summary_df = pd.read_json(ct_json_path)
+            ct_summary_df = ct_summary_df[["scheme", "max_ciphertext_size"]]
+        else:
+            ct_summary_df = pd.DataFrame(columns=["scheme", "max_ciphertext_size"])
+    except Exception:
+        ct_summary_df = pd.DataFrame(columns=["scheme", "max_ciphertext_size"])
 
     # RESUMEN GLOBAL COMPARATIVO POR DEVICE
     global_summary = (

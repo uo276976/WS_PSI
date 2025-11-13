@@ -98,6 +98,7 @@ def with_log_context(handler, cs, step_name, device=None):
             else: category = "NIKE"
 
         td_snapshot.key_size_mb = getattr(handler, "_last_key_size_mb", 0.0)
+        td_snapshot.ciphertext_size_mb = getattr(handler, "_last_ciphertext_size_mb", 0.0)
         
         push_temporal_trace(
             handler.id,

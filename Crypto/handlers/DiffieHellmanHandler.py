@@ -1,34 +1,33 @@
-import sys
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Logs.LogContext import with_log_context
 
 class DiffieHellmanHandler(IntersectionHandler):
     def intersection_first_step(self, device, cs):
+        """Paso 1: Enviar clave pública (g^a mod p)."""
         self.start_persistent_logging()
         with with_log_context(self, cs, "FIRST_STEP", device):
-            my_pub = cs.serialize_public_key()
-            self.send_message(device, None, cs.imp_name, my_pub, step="1")
-            return 0, len(str(my_pub).encode())
+            pub_b64 = cs.serialize_public_key()
+            self.send_message(device, None, cs.imp_name, peer_pubkey=pub_b64, step="1")
+        return None, None
 
     def intersection_second_step(self, device, cs, _, peer_pubkey):
+        """Paso 2: Recibir clave del peer, calcular y enviar la propia."""
         self.start_persistent_logging()
         with with_log_context(self, cs, "SECOND_STEP", device):
             peer_key = cs.reconstruct_public_key(peer_pubkey)
             cs.compute_shared_key(peer_key)
-            your_pub = cs.serialize_public_key()
-            self.send_message(device, None, cs.imp_name, your_pub, step="F")
-            return 0, len(str(your_pub).encode())
+            my_pub = cs.serialize_public_key()
+            self.send_message(device, None, cs.imp_name, peer_pubkey=my_pub, step="F")
+        self.stop_persistent_logging()
+        return None, None
 
     def intersection_final_step(self, device, cs, peer_pubkey):
+        """Paso 3: Calcular clave compartida."""
         with with_log_context(self, cs, "FINAL_STEP", device):
             if cs.shared_key is None:
                 peer_key = cs.reconstruct_public_key(peer_pubkey)
                 cs.compute_shared_key(peer_key)
             hexkey = cs.shared_key.hex()
             self.results[f"{device} Diffie-Hellman SharedKey"] = hexkey
-            
-            self._last_key_size_mb = self.measure_mb(hexkey)
-            
-            # print(f"[DiffieHellman] Shared derived key with {device}: {hexkey}")
         self.stop_persistent_logging()
         return None, None

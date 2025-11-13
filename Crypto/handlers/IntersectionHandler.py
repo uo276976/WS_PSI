@@ -42,14 +42,24 @@ class IntersectionHandler:
             "version": getattr(self, "version", None) or "unknown",
         }
         
-        key_size_mb = self.measure_mb(peer_pubkey) if peer_pubkey is not None else 0.0
+        current_key_size = self.measure_mb(peer_pubkey) if peer_pubkey is not None else 0.0
+        current_ciphertext_size = self.measure_mb(ser_enc_res) if ser_enc_res is not None else 0.0
+
+        prev_key = getattr(self, "_max_key_size_mb", 0.0)
+        prev_ct = getattr(self, "_max_ciphertext_size_mb", 0.0)
+
+        self._max_key_size_mb = max(prev_key, current_key_size)
+        self._max_ciphertext_size_mb = max(prev_ct, current_ciphertext_size)
 
         if peer_pubkey is not None:
             msg["pubkey"] = peer_pubkey
-            msg["key_size_mb"] = key_size_mb
+            msg["key_size_mb"] = self._max_key_size_mb
 
-        # Save for later Firebase logging
-        self._last_key_size_mb = key_size_mb
+        if ser_enc_res is not None:
+            msg["ciphertext_size_mb"] = self._max_ciphertext_size_mb
+
+        self._last_key_size_mb = current_key_size
+        self._last_ciphertext_size_mb = current_ciphertext_size
 
         # Optional context metadata (if available)
         if hasattr(self, "scheme_name"):
@@ -60,8 +70,12 @@ class IntersectionHandler:
         # Debug trace
         try:
             from datetime import datetime
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            print(f"[SEND][{timestamp}] → {peer} | step={step} | impl={implementation} | data={bool(ser_enc_res)} | pubkey={bool(peer_pubkey)}")
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            print(
+                f"[SEND][{ts}] → {peer} | step={step} | impl={implementation} | "
+                f"pk={bool(peer_pubkey)}(cur={current_key_size}MB / max={self._max_key_size_mb}MB) | "
+                f"ct={bool(ser_enc_res)}(cur={current_ciphertext_size}MB / max={self._max_ciphertext_size_mb}MB)"
+            )
         except Exception:
             pass
 
@@ -96,53 +110,42 @@ class IntersectionHandler:
 
     def measure_mb(self, data):
         """
-        Calcula el tamaño real (en MB) del contenido binario de una clave o mensaje,
-        intentando descontar el overhead de codificación (Base64, JSON, etc.).
+        Devuelve el tamaño REAL (en MB) de los datos binarios transmitidos.
+        Si el contenido está en base64, lo decodifica para obtener el tamaño
+        original en bytes. Si no lo está, mide directamente su longitud binaria.
         """
         if data is None:
             return 0.0
-
-        size_bytes = 0
 
         try:
             # Caso 1: bytes reales
             if isinstance(data, (bytes, bytearray)):
                 size_bytes = len(data)
 
-            # Caso 2: string (Base64 o JSON)
+            # Caso 2: base64 válido
             elif isinstance(data, str):
                 stripped = data.strip()
-
-                if len(stripped) % 4 == 0:
-                    try:
-                        decoded = base64.b64decode(stripped, validate=True)
-                        size_bytes = len(decoded)
-                    except binascii.Error:
-                        size_bytes = len(stripped.encode("utf-8"))
-                else:
+                try:
+                    decoded = base64.b64decode(stripped, validate=True)
+                    size_bytes = len(decoded)
+                except Exception:
+                    # No es base64 → medir el texto bruto (posiblemente JSON)
                     size_bytes = len(stripped.encode("utf-8"))
 
-            # Caso 3: dict o estructura
+            # Caso 3: diccionarios o estructuras serializadas
             elif isinstance(data, dict):
-                b64_field = None
+                total_bytes = 0
                 for k, v in data.items():
-                    if any(x in k.lower() for x in ["key", "pub"]):
-                        b64_field = v
-                        break
-                if b64_field:
-                    try:
-                        decoded = base64.b64decode(b64_field, validate=True)
-                        size_bytes = len(decoded)
-                    except Exception:
-                        size_bytes = len(str(b64_field).encode("utf-8"))
-                else:
-                    size_bytes = len(json.dumps(data).encode("utf-8"))
+                    if any(x in k.lower() for x in ["key", "pub", "ciphertext"]):
+                        total_bytes += self.measure_mb(v) * (1024 ** 2)
+                if total_bytes == 0:
+                    total_bytes = len(json.dumps(data).encode("utf-8"))
+                size_bytes = total_bytes
 
-            # Caso 4: enteros
+            # Caso 4: entero (poco probable aquí)
             elif isinstance(data, int):
                 size_bytes = (data.bit_length() + 7) // 8
 
-            # Caso 5: fallback genérico
             else:
                 size_bytes = len(str(data).encode("utf-8"))
 
