@@ -25,8 +25,8 @@ class PriorityExecutor:
         benchmark_mode = os.getenv("BENCHMARK_MODE", "false").lower() == "true"
         self.benchmark_mode = benchmark_mode
 
-        # Use 1 worker for benchmark mode, else default 10 (or provided value)
-        self.max_workers = 1 if benchmark_mode else (max_workers or 10)
+        # Use 1 worker for benchmark mode, else default 2
+        self.max_workers = 1 if benchmark_mode else (max_workers or 2)
 
         self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
         self.queue = PriorityQueue()

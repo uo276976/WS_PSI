@@ -1,7 +1,7 @@
-from Logs import Logs
+from Logger import Logs
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
 from Network.collections.DbConstants import VERSION
-from Logs.LogContext import with_log_context
+from Logger.LogContext import with_log_context
 
 class DomainPSIHandler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):

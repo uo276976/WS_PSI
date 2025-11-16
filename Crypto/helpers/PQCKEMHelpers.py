@@ -276,7 +276,6 @@ class HybridKyberX25519Helper:
     Properties:
       - Fail-secure: if either branch fails, no key is derived.
       - No additional round-trips.
-      - Compatible with generic KEMHandler.
     """
     def __init__(self):
         self.imp_name = "Hybrid-Kyber-X25519"

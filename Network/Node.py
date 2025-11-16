@@ -9,7 +9,7 @@ from Network.JSONHandler import JSONHandler
 from Network.PriorityExecutor import PriorityExecutor
 from Network.collections.DbConstants import DEFL_DOMAIN, DEFL_SET_SIZE
 from Crypto.helpers.CryptoImplementation import CryptoImplementation
-from Logs.Logs import get_container_limits
+from Logger.Logs import get_container_limits
 
 class Node:
     __instance = None

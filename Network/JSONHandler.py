@@ -28,8 +28,8 @@ from Crypto.helpers.X448Helper import X448Helper
 from Crypto.helpers.RSAHelper import RSAHelper
 
 from Crypto.helpers.PQCKEMHelpers import BIKEHelper, HQCHelper, SNTRUPHelper, P256Helper, X25519Helper, HybridKyberX25519Helper, KyberHelper
-from Logs import Logs
-from Logs.Logs import ThreadData
+from Logger import Logs
+from Logger.Logs import ThreadData
 from Network.PriorityExecutor import PriorityExecutor
 from Network.collections.DbConstants import VERSION, TEST_ROUNDS
 

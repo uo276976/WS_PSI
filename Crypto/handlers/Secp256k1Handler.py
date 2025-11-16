@@ -1,5 +1,5 @@
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
-from Logs.LogContext import with_log_context
+from Logger.LogContext import with_log_context
 
 class Secp256k1Handler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results, scheme_name="secp256k1", device_type="Unknown"):

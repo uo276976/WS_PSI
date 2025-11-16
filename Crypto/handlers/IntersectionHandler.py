@@ -2,7 +2,7 @@ import json
 import time
 import base64
 import binascii
-from Logs.Logs import ThreadData, start_logging, stop_logging
+from Logger.Logs import ThreadData, start_logging, stop_logging
 
 class IntersectionHandler:
     def __init__(self, id, my_data, domain, devices, results, device_type="Unknown"):

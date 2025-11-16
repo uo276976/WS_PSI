@@ -5,7 +5,7 @@ import base64
 from flask import Flask, render_template, jsonify, request
 from flask.views import MethodView
 
-from Logs import Logs
+from Logger import Logs
 from Network.Node import Node
 from Network.collections import networking
 from Network.collections.DbConstants import DEFL_PORT, print_banner

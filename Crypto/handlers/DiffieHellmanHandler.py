@@ -1,5 +1,5 @@
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
-from Logs.LogContext import with_log_context
+from Logger.LogContext import with_log_context
 
 class DiffieHellmanHandler(IntersectionHandler):
     def intersection_first_step(self, device, cs):

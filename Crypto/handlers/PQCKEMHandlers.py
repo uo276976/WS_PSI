@@ -1,7 +1,7 @@
 import base64
 import json
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
-from Logs.LogContext import with_log_context
+from Logger.LogContext import with_log_context
 
 
 class KEMHandler(IntersectionHandler):

@@ -1,6 +1,6 @@
 import base64
 from Crypto.handlers.IntersectionHandler import IntersectionHandler
-from Logs.LogContext import with_log_context
+from Logger.LogContext import with_log_context
 
 class X448Handler(IntersectionHandler):
     def __init__(self, id, my_data, domain, devices, results, scheme_name="X448", device_type="Unknown"):

@@ -1,6 +1,6 @@
 import time, threading, os, psutil
 from contextlib import contextmanager
-from Logs.Logs import (
+from Logger.Logs import (
     get_container_limits, log_activity_to_firebase, ThreadData, SAMPLING_INTERVAL,
     start_logging, stop_logging, _aggregate_stats, push_temporal_trace
 )
