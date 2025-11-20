@@ -1,5 +1,5 @@
 # PSI Suite - Python Web Service
-Servicio web de Flask que levanata un nodo y expone una API REST y una interfaz gráfica con el objetivo de probar diferentes criptosistemas y protocolos para calcular PSI (Private Set Intersection) o conjuntos de intersecciones privados.
+Servicio web de Flask que levanata un nodo y expone una API REST y una interfaz gráfica con el objetivo de probar diferentes criptosistemas y protocolos para calcular PSI (Private Set Intersection) o conjuntos de intersecciones privados. Así como realizar Intercambios de Clave
 
 ## Requisitos
 * **Python 3.11**
@@ -12,7 +12,7 @@ El sistema ha demostrado funcionar en sistemas ARM y x86. Se ha probado su funci
 
 Para arrancar el servicio se pueden seguir estos pasos:
 
-1. Clonar el repositorio: `git clone https://github.com/4rius/WS_PSI.git`. También se puede clonar utilizando el soporte gráfico de GitHub Desktop.
+1. Clonar el repositorio: `git clone https://github.com/uo276976/WS_PSI.git`. También se puede clonar utilizando el soporte gráfico de GitHub Desktop.
 2. Navegar a la carpeta del proyecto: `cd WS_PSI`.
 3. Instalar las dependencias, por conveniencia se puede utilizar un entorno virtual de Python:
     1. Crear un entorno virtual: `python -m venv WS-PSI-ENV` en Windows o `python3 -m venv WS-PSI-ENV` en Linux. En sistemas UNIX se recomienda comprobar que `python3` es una versión 3.11, esto se puede hacer con `python3 --version`. Si no fuera así, se puede instalar y evitar actualizar variables haciendo `python3.11 -m venv WS-PSI-ENV`.
