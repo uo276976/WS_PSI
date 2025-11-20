@@ -1,0 +1,518 @@
+{
+  "overall": {
+    "avg_time": 0.513726577251462,
+    "avg_cpu": 20.258708771929825,
+    "avg_ram": 0.2724690475367181,
+    "total_samples": 17100,
+    "device_types": 4,
+    "schemes": 15
+  },
+  "by_device": [
+    {
+      "device_type": "IoT",
+      "avg_time": 1.4131451975925926,
+      "avg_cpu": 10.783674074074073,
+      "avg_ram": 0.6415043113425926
+    },
+    {
+      "device_type": "Android",
+      "avg_time": 0.12767598907407407,
+      "avg_cpu": 21.97124074074074,
+      "avg_ram": 0.14229680447048612
+    },
+    {
+      "device_type": "WS",
+      "avg_time": 0.07423475592592593,
+      "avg_cpu": 25.534025925925924,
+      "avg_ram": 0.07603193449797453
+    },
+    {
+      "device_type": "UNIQUE",
+      "avg_time": 0.07046931222222222,
+      "avg_cpu": 35.18182222222222,
+      "avg_ram": 0.01791360133132365
+    }
+  ],
+  "by_device_by_scheme": [
+    {
+      "device_type": "Android",
+      "scheme": "RSA",
+      "avg_time": 0.015770075,
+      "avg_cpu": 22.633888888888887,
+      "avg_ram": 0.14337000868055555,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "P-256",
+      "avg_time": 0.01629560277777778,
+      "avg_cpu": 21.473916666666664,
+      "avg_ram": 0.1423721245659722,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "Kyber",
+      "avg_time": 0.016400991666666666,
+      "avg_cpu": 18.746666666666666,
+      "avg_ram": 0.14107023111979167,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "BIKE-L1",
+      "avg_time": 0.016550247222222224,
+      "avg_cpu": 19.726972222222223,
+      "avg_ram": 0.14199300130208334,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "X25519",
+      "avg_time": 0.01658211388888889,
+      "avg_cpu": 22.709055555555555,
+      "avg_ram": 0.14266786024305556,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "sntrup761",
+      "avg_time": 0.01699293333333333,
+      "avg_cpu": 21.348305555555555,
+      "avg_ram": 0.14221790907118056,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "P-384",
+      "avg_time": 0.017191738888888888,
+      "avg_cpu": 24.449694444444443,
+      "avg_ram": 0.14296308051215276,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "secp256k1",
+      "avg_time": 0.01781748611111111,
+      "avg_cpu": 24.019166666666667,
+      "avg_ram": 0.1434439019097222,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "ClassicMcEliece",
+      "avg_time": 0.022514305555555555,
+      "avg_cpu": 23.09777777777778,
+      "avg_ram": 0.14171272786458333,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "HQC-192",
+      "avg_time": 0.026702630555555554,
+      "avg_cpu": 26.06772222222222,
+      "avg_ram": 0.14180878363715277,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "Diffie-Hellman",
+      "avg_time": 0.03306711388888889,
+      "avg_cpu": 24.730694444444442,
+      "avg_ram": 0.14035430230034723,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "FrodoKEM",
+      "avg_time": 0.051565700000000006,
+      "avg_cpu": 11.78111111111111,
+      "avg_ram": 0.14104695638020834,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "X448",
+      "avg_time": 0.09124874722222223,
+      "avg_cpu": 22.713472222222222,
+      "avg_ram": 0.14359705946180557,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "Hybrid-Kyber-X25519",
+      "avg_time": 0.09165979722222221,
+      "avg_cpu": 21.87177777777778,
+      "avg_ram": 0.14315660264756944,
+      "samples": 360
+    },
+    {
+      "device_type": "Android",
+      "scheme": "Diffie-Hellman-8192",
+      "avg_time": 1.4647803527777776,
+      "avg_cpu": 24.19838888888889,
+      "avg_ram": 0.14267751736111112,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "RSA",
+      "avg_time": 0.06468026111111111,
+      "avg_cpu": 11.666944444444445,
+      "avg_ram": 0.6494791666666667,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "Kyber",
+      "avg_time": 0.0678709,
+      "avg_cpu": 10.394944444444445,
+      "avg_ram": 0.6280514322916667,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "X25519",
+      "avg_time": 0.07058016111111111,
+      "avg_cpu": 11.476333333333333,
+      "avg_ram": 0.6446883680555556,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "BIKE-L1",
+      "avg_time": 0.07431870833333333,
+      "avg_cpu": 10.657638888888888,
+      "avg_ram": 0.6392479383680555,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "sntrup761",
+      "avg_time": 0.07468665277777778,
+      "avg_cpu": 10.297638888888889,
+      "avg_ram": 0.6391289062500001,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "P-256",
+      "avg_time": 0.07695799444444444,
+      "avg_cpu": 11.675805555555556,
+      "avg_ram": 0.6422966579861111,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "secp256k1",
+      "avg_time": 0.078369975,
+      "avg_cpu": 12.37175,
+      "avg_ram": 0.6469408637152778,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "P-384",
+      "avg_time": 0.07982898055555555,
+      "avg_cpu": 12.348194444444445,
+      "avg_ram": 0.6471231553819444,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "Hybrid-Kyber-X25519",
+      "avg_time": 0.12259090555555555,
+      "avg_cpu": 12.257583333333333,
+      "avg_ram": 0.6500230034722223,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "X448",
+      "avg_time": 0.1315397138888889,
+      "avg_cpu": 11.816583333333334,
+      "avg_ram": 0.6480098741319444,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "ClassicMcEliece",
+      "avg_time": 0.15841326666666666,
+      "avg_cpu": 10.010277777777777,
+      "avg_ram": 0.6416354166666666,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "HQC-192",
+      "avg_time": 0.32169033888888887,
+      "avg_cpu": 12.36975,
+      "avg_ram": 0.6380729166666667,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "Diffie-Hellman",
+      "avg_time": 0.36982515555555556,
+      "avg_cpu": 9.111777777777776,
+      "avg_ram": 0.6226030815972222,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "FrodoKEM",
+      "avg_time": 0.4278430833333333,
+      "avg_cpu": 5.663666666666667,
+      "avg_ram": 0.6380330946180556,
+      "samples": 360
+    },
+    {
+      "device_type": "IoT",
+      "scheme": "Diffie-Hellman-8192",
+      "avg_time": 19.07798186666667,
+      "avg_cpu": 9.636222222222223,
+      "avg_ram": 0.6472307942708333,
+      "samples": 360
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "sntrup761",
+      "avg_time": 0.015795266666666665,
+      "avg_cpu": 38.90716666666666,
+      "avg_ram": 0.01772590076509253,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "Kyber",
+      "avg_time": 0.01588395,
+      "avg_cpu": 33.699666666666666,
+      "avg_ram": 0.0180335052969079,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "P-256",
+      "avg_time": 0.015900166666666667,
+      "avg_cpu": 33.414833333333334,
+      "avg_ram": 0.017688861808453395,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "BIKE-L1",
+      "avg_time": 0.01596165,
+      "avg_cpu": 33.20033333333333,
+      "avg_ram": 0.017876395228843024,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "X25519",
+      "avg_time": 0.016101166666666666,
+      "avg_cpu": 33.08883333333333,
+      "avg_ram": 0.017602184750652818,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "RSA",
+      "avg_time": 0.0166766,
+      "avg_cpu": 34.134,
+      "avg_ram": 0.018121762514974653,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "secp256k1",
+      "avg_time": 0.017113316666666666,
+      "avg_cpu": 36.26733333333333,
+      "avg_ram": 0.018103411587083475,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "P-384",
+      "avg_time": 0.017338299999999997,
+      "avg_cpu": 31.831666666666667,
+      "avg_ram": 0.018094794446431934,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "ClassicMcEliece",
+      "avg_time": 0.0187541,
+      "avg_cpu": 42.67216666666666,
+      "avg_ram": 0.017959574865254468,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "HQC-192",
+      "avg_time": 0.023394916666666665,
+      "avg_cpu": 38.125,
+      "avg_ram": 0.017820857862687868,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "Diffie-Hellman",
+      "avg_time": 0.031343916666666666,
+      "avg_cpu": 37.96033333333333,
+      "avg_ram": 0.01775274242081396,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "FrodoKEM",
+      "avg_time": 0.04680196666666667,
+      "avg_cpu": 24.634166666666665,
+      "avg_ram": 0.01804488245082436,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "Hybrid-Kyber-X25519",
+      "avg_time": 0.09166035,
+      "avg_cpu": 34.9945,
+      "avg_ram": 0.01812962117869843,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "X448",
+      "avg_time": 0.09206306666666667,
+      "avg_cpu": 34.519999999999996,
+      "avg_ram": 0.018115673630748994,
+      "samples": 60
+    },
+    {
+      "device_type": "UNIQUE",
+      "scheme": "Diffie-Hellman-8192",
+      "avg_time": 0.62225095,
+      "avg_cpu": 40.27733333333333,
+      "avg_ram": 0.01763385116238696,
+      "samples": 60
+    },
+    {
+      "device_type": "WS",
+      "scheme": "Kyber",
+      "avg_time": 0.016079230555555553,
+      "avg_cpu": 22.851166666666668,
+      "avg_ram": 0.07641197374131944,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "BIKE-L1",
+      "avg_time": 0.016271169444444445,
+      "avg_cpu": 23.889444444444447,
+      "avg_ram": 0.07611828613281249,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "sntrup761",
+      "avg_time": 0.01637600277777778,
+      "avg_cpu": 24.65238888888889,
+      "avg_ram": 0.07591936577690972,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "P-256",
+      "avg_time": 0.01657062222222222,
+      "avg_cpu": 22.756416666666667,
+      "avg_ram": 0.075999267578125,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "RSA",
+      "avg_time": 0.01657792777777778,
+      "avg_cpu": 25.00413888888889,
+      "avg_ram": 0.07590218098958333,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "X25519",
+      "avg_time": 0.016730894444444443,
+      "avg_cpu": 24.873694444444446,
+      "avg_ram": 0.07604866536458334,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "P-384",
+      "avg_time": 0.017670894444444443,
+      "avg_cpu": 27.114555555555555,
+      "avg_ram": 0.07619315592447917,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "secp256k1",
+      "avg_time": 0.0177657,
+      "avg_cpu": 26.726527777777775,
+      "avg_ram": 0.07598460557725695,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "ClassicMcEliece",
+      "avg_time": 0.01993729166666667,
+      "avg_cpu": 28.181805555555556,
+      "avg_ram": 0.07602998860677083,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "HQC-192",
+      "avg_time": 0.024550966666666667,
+      "avg_cpu": 28.951055555555552,
+      "avg_ram": 0.076019775390625,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "Diffie-Hellman",
+      "avg_time": 0.03360791111111111,
+      "avg_cpu": 32.10219444444445,
+      "avg_ram": 0.07563163248697917,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "FrodoKEM",
+      "avg_time": 0.051543852777777774,
+      "avg_cpu": 14.561305555555554,
+      "avg_ram": 0.07612400987413194,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "Hybrid-Kyber-X25519",
+      "avg_time": 0.09099848055555555,
+      "avg_cpu": 24.790972222222223,
+      "avg_ram": 0.07602728949652778,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "X448",
+      "avg_time": 0.09145118611111111,
+      "avg_cpu": 23.99436111111111,
+      "avg_ram": 0.07600526258680557,
+      "samples": 360
+    },
+    {
+      "device_type": "WS",
+      "scheme": "Diffie-Hellman-8192",
+      "avg_time": 0.6673892083333333,
+      "avg_cpu": 32.560361111111106,
+      "avg_ram": 0.07606355794270833,
+      "samples": 360
+    }
+  ]
+}
